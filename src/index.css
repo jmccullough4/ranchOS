@@ -1,8 +1,58 @@
+@import "maplibre-gl/dist/maplibre-gl.css";
+@import url("https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.0/dist/mapbox-gl-draw.css");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import 'maplibre-gl/dist/maplibre-gl.css';
+:root {
+  color-scheme: dark;
+}
 
-html, body, #root { height: 100%; }
-.maplibre-container { border-radius: 1rem; overflow: hidden; }
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0a0a0a;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.maplibre-container {
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+@keyframes scanSweep {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.scan-visor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to right,
+    rgba(94, 234, 212, 0.08) 0px,
+    rgba(94, 234, 212, 0.08) 1px,
+    transparent 1px,
+    transparent 5px
+  );
+  opacity: 0.45;
+}
+
+.scan-visor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(94, 234, 212, 0.35), rgba(59, 130, 246, 0));
+  mix-blend-mode: screen;
+  animation: scanSweep 2.8s linear infinite;
+  opacity: 0.35;
+}
