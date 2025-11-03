@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import { useHerd } from "./hooks/useHerd.js";
 import { useTelemetry } from "./hooks/useTelemetry.js";
 import { formatNow } from "./utils/time.js";
 import { DemoToast } from "./components/DemoToast.jsx";
 import { LoginScreen } from "./components/LoginScreen.jsx";
-import { EidTab } from "./components/EidTab.jsx";
 import { Footer } from "./components/Footer.jsx";
 import { Header } from "./components/Header.jsx";
 import { Dashboard } from "./components/Dashboard.jsx";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [toastMessage, setToastMessage] = useState("");
   const [rows, setRows] = useState([]);
   const [options, setOptions] = useState({ basemap: "satellite", breadcrumbs: true, heatmap: true });
@@ -68,25 +65,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
-      <Header activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={() => setUser(null)} />
+      <Header telemetry={telemetry} herd={herd} user={user} onLogout={() => setUser(null)} />
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <AnimatePresence mode="wait">
-          {activeTab === "dashboard" ? (
-            <Dashboard
-              telemetry={telemetry}
-              herd={herd}
-              sms={toastMessage}
-              options={options}
-              onOptionsChange={setOptions}
-              onNotify={handleNotify}
-              reportStatus={reportStatus}
-              onSendReport={handleReport}
-            />
-          ) : (
-            <EidTab rows={rows} onAddRow={handleAddRow} onPrintReceipt={handleReceipt} />
-          )}
-        </AnimatePresence>
+        <Dashboard
+          telemetry={telemetry}
+          herd={herd}
+          options={options}
+          onOptionsChange={setOptions}
+          onNotify={handleNotify}
+          reportStatus={reportStatus}
+          onSendReport={handleReport}
+          rows={rows}
+          onAddRow={handleAddRow}
+          onPrintReceipt={handleReceipt}
+        />
       </main>
 
       <DemoToast message={toastMessage} />

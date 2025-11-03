@@ -81,7 +81,7 @@ export function LoginScreen({ onLogin }) {
               <div className="text-xs uppercase tracking-[0.35em] text-emerald-400">Secure access</div>
               <h1 className="mt-3 text-3xl font-semibold text-neutral-50">Sign in to ranchOS</h1>
               <p className="mt-2 text-sm text-neutral-400">
-                Use your demo credentials to continue into the live operations environment. Theme-aligned access keeps the brand
+                Use your ranchOS credentials to continue into the live operations environment. Theme-aligned access keeps the brand
                 consistent from login to dashboard.
               </p>
             </div>
