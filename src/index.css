@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+html, body, #root { height: 100%; }
+.maplibre-container { border-radius: 1rem; overflow: hidden; }
