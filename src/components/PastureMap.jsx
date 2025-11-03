@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { ranchBounds, ranchCenter } from "../constants/ranch.js";
 import { hasMapboxToken, mapboxToken } from "../constants/map.js";
@@ -151,6 +151,7 @@ export function PastureMap({
   const onSelectCowRef = useRef(onSelectCow);
   const optionsRef = useRef(options);
   const onDrawReadyRef = useRef(onDrawReady);
+  const [groupSelectionIds, setGroupSelectionIds] = useState([]);
 
   useEffect(() => {
     cowsRef.current = cows;
@@ -164,7 +165,59 @@ export function PastureMap({
     onSelectCowRef.current = onSelectCow;
   }, [onSelectCow]);
 
-  const overlayCow = selectedCow ?? cows.find((item) => item.id === selectedCowId) ?? null;
+  const overlayCow = groupSelectionIds.length
+    ? null
+    : selectedCow ?? cows.find((item) => item.id === selectedCowId) ?? null;
+
+  const groupSelection = useMemo(
+    () => cows.filter((cow) => groupSelectionIds.includes(cow.id)),
+    [cows, groupSelectionIds],
+  );
+
+  const groupStats = useMemo(() => {
+    if (groupSelection.length === 0) return null;
+    const count = groupSelection.length;
+    const totals = groupSelection.reduce(
+      (accumulator, cow) => {
+        accumulator.weight += cow.weight;
+        accumulator.distance += cow.distanceFromCenter;
+        accumulator.temp += parseFloat(cow.temperature);
+        if (cow.isStray) accumulator.strays += 1;
+        return accumulator;
+      },
+      { weight: 0, distance: 0, temp: 0, strays: 0 },
+    );
+    return {
+      count,
+      avgWeight: totals.weight / count,
+      avgDistance: totals.distance / count,
+      avgTemp: totals.temp / count,
+      strayCount: totals.strays,
+    };
+  }, [groupSelection]);
+
+  const straySummary = useMemo(() => {
+    const strays = cows.filter((cow) => cow.isStray);
+    if (strays.length === 0) return null;
+    const centroid = strays.reduce(
+      (accumulator, cow) => {
+        accumulator.lon += cow.lon;
+        accumulator.lat += cow.lat;
+        return accumulator;
+      },
+      { lon: 0, lat: 0 },
+    );
+    centroid.lon /= strays.length;
+    centroid.lat /= strays.length;
+    const horizontal = centroid.lon > ranchCenter.lon ? "eastern" : "western";
+    const vertical = centroid.lat > ranchCenter.lat ? "north" : "south";
+    return {
+      count: strays.length,
+      centroid,
+      descriptor: `${vertical}-${horizontal}`,
+      distance: strays.reduce((max, cow) => Math.max(max, cow.distanceFromCenter), 0),
+    };
+  }, [cows]);
 
   useEffect(() => {
     optionsRef.current = options;
@@ -342,6 +395,7 @@ export function PastureMap({
             if (!feature) return;
             const cow = cowsRef.current.find((item) => item.id === feature.properties?.id);
             if (!cow) return;
+            setGroupSelectionIds([]);
             onSelectCowRef.current?.(cow);
           });
 
@@ -351,6 +405,23 @@ export function PastureMap({
       map.on("mouseleave", "cow-dots", () => {
         map.getCanvas().style.cursor = "";
       });
+
+          map.on("boxzoomend", (event) => {
+            const bounds = event?.boxZoomBounds;
+            if (!bounds) return;
+            const selected = cowsRef.current.filter(
+              (cow) =>
+                cow.lon >= bounds.getWest() &&
+                cow.lon <= bounds.getEast() &&
+                cow.lat >= bounds.getSouth() &&
+                cow.lat <= bounds.getNorth(),
+            );
+            const ids = selected.map((cow) => cow.id);
+            setGroupSelectionIds(ids);
+            if (ids.length) {
+              onSelectCowRef.current?.(null);
+            }
+          });
 
           const bounds = computeBounds(boundary ?? getFeatureCollection());
           map.fitBounds(bounds, { padding: 40, maxZoom: 18 });
@@ -489,9 +560,13 @@ export function PastureMap({
     if (!map) return;
     const activeCow = selectedCow ?? cows.find((item) => item.id === selectedCowId);
     if (map.getLayer(selectedCowLayerId)) {
-      map.setFilter(selectedCowLayerId, ["==", ["get", "id"], activeCow?.id ?? ""]);
+      if (groupSelectionIds.length > 0) {
+        map.setFilter(selectedCowLayerId, ["in", ["get", "id"], ["literal", groupSelectionIds]]);
+      } else {
+        map.setFilter(selectedCowLayerId, ["==", ["get", "id"], activeCow?.id ?? ""]);
+      }
     }
-    if (!activeCow) {
+    if (!activeCow || groupSelectionIds.length > 0) {
       popupRef.current?.remove();
       popupRef.current = null;
       return;
@@ -499,15 +574,39 @@ export function PastureMap({
     const popup = popupRef.current ?? new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 12 });
     popupRef.current = popup;
     popup.setLngLat([activeCow.lon, activeCow.lat]).setHTML(buildCowPopup(activeCow)).addTo(map);
-  }, [selectedCow, selectedCowId, cows]);
+  }, [selectedCow, selectedCowId, cows, groupSelectionIds]);
 
   const handleClearSelection = () => {
     popupRef.current?.remove();
     popupRef.current = null;
     onSelectCowRef.current?.(null);
+    setGroupSelectionIds([]);
   };
 
   const heightClass = variant === "expanded" ? "h-[420px] sm:h-[520px] lg:h-[600px]" : "h-[320px] sm:h-[340px]";
+
+  const handleClearGroup = () => {
+    setGroupSelectionIds([]);
+    onSelectCowRef.current?.(null);
+  };
+
+  const handleFocusStrays = () => {
+    const map = mapRef.current;
+    if (!map || !straySummary) return;
+    const strays = cows.filter((cow) => cow.isStray);
+    if (!strays.length) return;
+    const minLon = Math.min(...strays.map((cow) => cow.lon));
+    const maxLon = Math.max(...strays.map((cow) => cow.lon));
+    const minLat = Math.min(...strays.map((cow) => cow.lat));
+    const maxLat = Math.max(...strays.map((cow) => cow.lat));
+    map.fitBounds(
+      [
+        [minLon, minLat],
+        [maxLon, maxLat],
+      ],
+      { padding: 120, maxZoom: 18, duration: 800 },
+    );
+  };
 
   return (
     <div className={`relative ${heightClass} overflow-hidden rounded-2xl`}>
@@ -614,8 +713,64 @@ export function PastureMap({
         </div>
       )}
       <div ref={mapContainerRef} className="h-full w-full" />
+      {straySummary && (
+        <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-xs flex-col gap-2">
+          <div className="pointer-events-auto rounded-2xl border border-amber-500/40 bg-neutral-950/95 p-3 text-xs text-amber-100 shadow-lg backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-amber-300">AI herd monitor</div>
+                <div className="mt-1 text-sm font-semibold text-amber-100">{straySummary.count} straggler{straySummary.count === 1 ? "" : "s"}</div>
+                <div className="text-[11px] text-amber-200">Cluster {straySummary.descriptor.replace("-", " ")} paddock</div>
+                <div className="mt-1 text-[11px] text-amber-200/80">Max hub distance {Math.round(straySummary.distance)} m</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleFocusStrays}
+                className="rounded-lg border border-amber-400/60 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/20"
+              >
+                Locate
+              </button>
+            </div>
+            <div className="mt-2 text-[11px] text-amber-100/80">
+              Stragglers detected beyond the main herd cluster. Shift-drag to box select and inspect.
+            </div>
+          </div>
+        </div>
+      )}
+      {groupStats && (
+        <div className="pointer-events-none absolute bottom-3 right-3 z-10 w-72 max-w-[calc(100%-1.5rem)]">
+          <div className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-emerald-300">Selection batch</div>
+                <div className="mt-1 text-sm font-semibold text-neutral-50">{groupStats.count} animals</div>
+                <div className="text-[11px] text-neutral-400">Avg weight {Math.round(groupStats.avgWeight)} lb · Hub {Math.round(groupStats.avgDistance)} m</div>
+                <div className="text-[11px] text-neutral-400">Avg temp {groupStats.avgTemp.toFixed(1)} °F · Strays {groupStats.strayCount}</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearGroup}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-200 hover:border-emerald-500/50"
+              >
+                Clear
+              </button>
+            </div>
+            <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto pr-1 text-[11px]">
+              {groupSelection.map((cow) => (
+                <li key={cow.id} className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-neutral-100">{cow.tag}</span>
+                    <span className="text-[10px] text-neutral-500">{cow.id}</span>
+                  </div>
+                  <div className="text-[10px] text-neutral-400">{cow.weight} lb · Fence {Math.round(cow.distanceToFence)} m</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
       {!hasMapboxToken && (
-        <div className="pointer-events-none absolute inset-0 flex items-start justify-end p-3">
+        <div className="pointer-events-none absolute inset-0 flex items-end justify-start p-3">
           <div className="pointer-events-auto max-w-xs rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100 shadow">
             Provide a Mapbox access token via <span className="font-mono">VITE_MAPBOX_TOKEN</span> or <span className="font-mono">window.MAPBOX_TOKEN</span> to enable satellite and dark basemaps.
           </div>

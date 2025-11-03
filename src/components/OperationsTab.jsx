@@ -261,6 +261,9 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 </select>
               </label>
               <div className="text-right text-neutral-400">Tracking {herd.cows.length} head</div>
+              <div className="col-span-full text-[11px] text-neutral-500">
+                Tip: Shift + drag on the map to box-select animals and review batch metrics.
+              </div>
             </div>
           </div>
           <div className={`flex flex-col gap-3 ${isExpanded ? "lg:sticky lg:top-6 lg:h-fit" : ""}`}>

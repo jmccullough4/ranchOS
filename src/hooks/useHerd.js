@@ -8,6 +8,37 @@ function randomChoice(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+const stragglerTargetCount = 6;
+const herdFocus = {
+  lon: ranchCenter.lon - 0.0014,
+  lat: ranchCenter.lat + 0.001,
+};
+const stragglerFocus = {
+  lon: ranchBounds.maxLon - 0.0012,
+  lat: ranchBounds.minLat + 0.0012,
+};
+
+function clampCoordinate(value, min, max) {
+  return clamp(value, min, max);
+}
+
+function createPosition(isStraggler) {
+  const center = isStraggler ? stragglerFocus : herdFocus;
+  const lonSpread = isStraggler ? 0.0007 : 0.0016;
+  const latSpread = isStraggler ? 0.0006 : 0.0012;
+  const lon = clampCoordinate(
+    center.lon + (Math.random() - 0.5) * lonSpread,
+    ranchBounds.minLon + 0.0004,
+    ranchBounds.maxLon - 0.0004,
+  );
+  const lat = clampCoordinate(
+    center.lat + (Math.random() - 0.5) * latSpread,
+    ranchBounds.minLat + 0.0004,
+    ranchBounds.maxLat - 0.0004,
+  );
+  return { lon, lat };
+}
+
 const vaccines = [
   { name: "Bovishield Gold 5", type: "Respiratory" },
   { name: "Vision 7", type: "Clostridial" },
@@ -67,7 +98,7 @@ function evaluateStray(distanceFromCenter, distanceToFence) {
   return distanceFromCenter > strayDistanceMeters || distanceToFence < fenceWarningMeters;
 }
 
-function createCow(index) {
+function createCow(index, totalCount) {
   const baseWeight = 1050 + Math.random() * 250;
   const breeds = ["Brangus", "Angus", "Red Angus", "Hereford", "Charolais"];
   const statuses = ["Bred", "Open", "Heavy bred", "Pair"];
@@ -75,8 +106,8 @@ function createCow(index) {
   const getHealthNote = () => healthFlags[Math.floor(Math.random() * healthFlags.length)];
   const age = Math.floor(Math.random() * 4) + 3;
   const pregnancy = statuses[Math.floor(Math.random() * statuses.length)];
-  const lon = ranchBounds.minLon + Math.random() * (ranchBounds.maxLon - ranchBounds.minLon);
-  const lat = ranchBounds.minLat + Math.random() * (ranchBounds.maxLat - ranchBounds.minLat);
+  const isStraggler = index >= Math.max(totalCount - stragglerTargetCount, 0);
+  const { lon, lat } = createPosition(isStraggler);
   const distanceFromCenter = distanceInMeters({ lon, lat }, ranchCenter);
   const distanceToFence = distanceToFenceMeters({ lon, lat }, ranchBounds);
   return {
@@ -95,26 +126,38 @@ function createCow(index) {
     healthNote: getHealthNote(),
     lon,
     lat,
-    vx: (Math.random() - 0.5) * 0.00015,
-    vy: (Math.random() - 0.5) * 0.00015,
+    homeLon: lon,
+    homeLat: lat,
+    vx: (Math.random() - 0.5) * 0.00008,
+    vy: (Math.random() - 0.5) * 0.00008,
     immunizations: buildImmunizationRecord(index),
     distanceFromCenter,
     distanceToFence,
     isStray: evaluateStray(distanceFromCenter, distanceToFence),
     lastSeenTs: Date.now() - Math.floor(Math.random() * 60000),
+    isStraggler,
   };
 }
 
 export function useHerd(count = 50, tickMs = 1000) {
-  const [cows, setCows] = useState(() => Array.from({ length: count }, (_, index) => createCow(index)));
+  const [cows, setCows] = useState(() => Array.from({ length: count }, (_, index) => createCow(index, count)));
   const [trails, setTrails] = useState(() => new Map());
   const tick = useTicker(tickMs);
 
   useEffect(() => {
     setCows((list) =>
       list.map((cow) => {
-        let vx = clamp(cow.vx + (Math.random() - 0.5) * 0.00003, -0.00025, 0.00025);
-        let vy = clamp(cow.vy + (Math.random() - 0.5) * 0.00003, -0.00025, 0.00025);
+        const pullStrength = cow.isStraggler ? 0.16 : 0.1;
+        let vx = clamp(
+          cow.vx + (Math.random() - 0.5) * 0.000025 + (cow.homeLon - cow.lon) * pullStrength,
+          -0.00025,
+          0.00025,
+        );
+        let vy = clamp(
+          cow.vy + (Math.random() - 0.5) * 0.000025 + (cow.homeLat - cow.lat) * pullStrength,
+          -0.00025,
+          0.00025,
+        );
         let lon = cow.lon + vx;
         let lat = cow.lat + vy;
 
