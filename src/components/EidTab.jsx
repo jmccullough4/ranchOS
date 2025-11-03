@@ -25,6 +25,8 @@ function printReceipt(row) {
 
 export function EidTab({ rows, onAddRow, onPrintReceipt }) {
   const latest = rows.at(-1);
+  const shrinkPct = latest ? ((parseInt(latest.eid.slice(-2), 10) % 4) + 1) : null;
+  const chuteTemp = latest ? 99 + (parseInt(latest.eid.slice(-3), 10) % 3) : null;
 
   return (
     <motion.section key="eid" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
@@ -34,10 +36,35 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
           <div className="text-xs text-neutral-400">Bluetooth EID reader · Scale</div>
         </div>
         <div className="space-y-3 p-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <Field label="EID" value={latest?.eid || "84000…"} />
-            <Field label="Weight (lb)" value={latest?.weight || "—"} />
-            <Field label="Treatment" value={latest?.treatment || "—"} />
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_minmax(0,1fr)]">
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="EID" value={latest?.eid || "84000…"} />
+                <Field label="Weight (lb)" value={latest?.weight || "—"} />
+                <Field label="Treatment" value={latest?.treatment || "—"} />
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Shrink" value={latest ? `${shrinkPct}%` : "—"} />
+                <Field label="Temp" value={latest ? `${chuteTemp} °F` : "—"} />
+                <Field label="Disposition" value={latest ? "Calm" : "—"} />
+              </div>
+            </div>
+            <div className="relative flex min-h-[220px] items-stretch justify-center overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-transparent to-sky-500/20">
+              <video
+                src="/chute-scan.mp4"
+                className="h-full w-full object-cover opacity-70 mix-blend-screen"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#2dd4bf22,transparent_60%)]" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-black/60 to-transparent px-3 py-2 text-[11px] uppercase tracking-wide text-emerald-200">
+                <span>Chute 3 · Depth vision</span>
+                <span>LIVE</span>
+              </div>
+              <div className="scan-visor pointer-events-none absolute inset-0" />
+            </div>
           </div>
           <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3">
             <div className="mb-2 text-xs text-neutral-400">Scans this session</div>
@@ -65,7 +92,7 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
                   {rows.length === 0 && (
                     <tr>
                       <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
-                        Scan an EID to begin… (or press ▶ Play demo)
+                        Scan an EID to begin and monitor the chute-side stream for confirmation.
                       </td>
                     </tr>
                   )}

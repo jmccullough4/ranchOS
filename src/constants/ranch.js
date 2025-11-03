@@ -1,4 +1,4 @@
-export const ranchCenter = { lat: 26.808367, lon: -80.26719 };
+export const ranchCenter = { lat: 27.520797, lon: -82.080431 };
 
 export const ranchBounds = {
   minLon: ranchCenter.lon - 0.006,

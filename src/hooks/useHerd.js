@@ -3,9 +3,20 @@ import { ranchBounds } from "../constants/ranch.js";
 import { clamp } from "../utils/math.js";
 import { useTicker } from "./useTicker.js";
 
+function randomChoice(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 function createCow(index) {
+  const baseWeight = 1050 + Math.random() * 250;
   return {
     id: `C-${String(index).padStart(3, "0")}`,
+    tag: `840-3S-${String(3100 + index).padStart(4, "0")}`,
+    weight: Math.round(baseWeight),
+    bodyCondition: randomChoice(["5.0", "5.5", "6.0", "6.5"]),
+    lastCheck: `${Math.floor(Math.random() * 4) + 1} days ago`,
+    lastTreatment: randomChoice(["Vita Charge", "Dewormer", "Respiratory Booster", "Implant"]),
+    notes: randomChoice(["Bred AI", "Excellent gain", "Monitor hoof", "Ready for market"]),
     lon: ranchBounds.minLon + Math.random() * (ranchBounds.maxLon - ranchBounds.minLon),
     lat: ranchBounds.minLat + Math.random() * (ranchBounds.maxLat - ranchBounds.minLat),
     vx: (Math.random() - 0.5) * 0.00015,
@@ -13,7 +24,7 @@ function createCow(index) {
   };
 }
 
-export function useHerd(count = 160, tickMs = 1000) {
+export function useHerd(count = 50, tickMs = 1000) {
   const [cows, setCows] = useState(() => Array.from({ length: count }, (_, index) => createCow(index)));
   const [trails, setTrails] = useState(() => new Map());
   const tick = useTicker(tickMs);
@@ -39,7 +50,9 @@ export function useHerd(count = 160, tickMs = 1000) {
           vy *= -0.5;
         }
 
-        return { ...cow, lon, lat, vx, vy };
+        const weightShift = (Math.random() - 0.5) * 0.8;
+        const weight = Math.max(950, Math.round(cow.weight + weightShift));
+        return { ...cow, lon, lat, vx, vy, weight };
       }),
     );
   }, [tick]);
@@ -50,7 +63,7 @@ export function useHerd(count = 160, tickMs = 1000) {
       for (const cow of cows) {
         const points = map.get(cow.id) ?? [];
         points.push({ lon: cow.lon, lat: cow.lat });
-        if (points.length > 20) points.shift();
+        if (points.length > 60) points.shift();
         map.set(cow.id, points);
       }
       return map;
