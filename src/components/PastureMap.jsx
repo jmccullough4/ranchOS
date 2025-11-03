@@ -12,8 +12,10 @@ const ranchSourceId = "ranch-bounds";
 const selectedCowLayerId = "cow-selected";
 const activePastureLayerId = "paddock-active";
 const drawStylesheetId = "mapbox-draw-stylesheet";
+const mapboxTerrainSourceId = "mapbox-dem";
+const skyLayerId = "ranchos-sky";
 
-function createStyle() {
+function createFallbackStyle() {
   if (!hasMapboxToken) {
     return "https://demotiles.maplibre.org/style.json";
   }
@@ -48,6 +50,105 @@ function createStyle() {
         layout: { visibility: "none" },
       },
     ],
+  };
+}
+
+const drawStyles = [
+  {
+    id: "gl-draw-polygon-fill-inactive",
+    type: "fill",
+    filter: ["all", ["==", "active", "false"], ["==", "$type", "Polygon"]],
+    paint: { "fill-color": "#22c55e", "fill-opacity": 0.06 },
+  },
+  {
+    id: "gl-draw-polygon-fill-active",
+    type: "fill",
+    filter: ["all", ["==", "active", "true"], ["==", "$type", "Polygon"]],
+    paint: { "fill-color": "#f97316", "fill-opacity": 0.1 },
+  },
+  {
+    id: "gl-draw-polygon-stroke-inactive",
+    type: "line",
+    filter: ["all", ["==", "active", "false"], ["==", "$type", "Polygon"]],
+    paint: { "line-color": "#22c55e", "line-width": 1.2 },
+  },
+  {
+    id: "gl-draw-polygon-stroke-active",
+    type: "line",
+    filter: ["all", ["==", "active", "true"], ["==", "$type", "Polygon"]],
+    paint: { "line-color": "#f97316", "line-width": 2 },
+  },
+  {
+    id: "gl-draw-line-inactive",
+    type: "line",
+    filter: ["all", ["==", "active", "false"], ["==", "$type", "LineString"]],
+    paint: { "line-color": "#22c55e", "line-width": 1.2 },
+  },
+  {
+    id: "gl-draw-line-active",
+    type: "line",
+    filter: ["all", ["==", "active", "true"], ["==", "$type", "LineString"]],
+    paint: { "line-color": "#f97316", "line-width": 2 },
+  },
+  {
+    id: "gl-draw-polygon-midpoint",
+    type: "circle",
+    filter: ["all", ["==", "$type", "Point"], ["==", "meta", "midpoint"]],
+    paint: { "circle-radius": 4, "circle-color": "#f97316" },
+  },
+  {
+    id: "gl-draw-polygon-and-line-vertex-halo-active",
+    type: "circle",
+    filter: ["all", ["==", "$type", "Point"], ["==", "meta", "vertex"], ["==", "active", "true"]],
+    paint: { "circle-radius": 7, "circle-color": "#f97316", "circle-opacity": 0.25 },
+  },
+  {
+    id: "gl-draw-polygon-and-line-vertex-active",
+    type: "circle",
+    filter: ["all", ["==", "$type", "Point"], ["==", "meta", "vertex"], ["==", "active", "true"]],
+    paint: {
+      "circle-radius": 4.5,
+      "circle-color": "#fb923c",
+      "circle-stroke-color": "#1f2937",
+      "circle-stroke-width": 1,
+    },
+  },
+  {
+    id: "gl-draw-polygon-and-line-vertex-inactive",
+    type: "circle",
+    filter: ["all", ["==", "$type", "Point"], ["==", "meta", "vertex"], ["!=", "active", "true"]],
+    paint: {
+      "circle-radius": 4,
+      "circle-color": "#22c55e",
+      "circle-stroke-color": "#14532d",
+      "circle-stroke-width": 1,
+    },
+  },
+];
+
+function cowToFeature(cow) {
+  return {
+    type: "Feature",
+    properties: {
+      id: cow.id,
+      tag: cow.tag,
+      weight: cow.weight,
+      bodyCondition: cow.bodyCondition,
+      lastCheck: cow.lastCheck,
+      notes: cow.notes,
+      lastTreatment: cow.lastTreatment,
+      breed: cow.breed,
+      ageYears: cow.ageYears,
+      pregnancy: cow.pregnancy,
+      avgDailyGain: cow.avgDailyGain,
+      temperature: cow.temperature,
+      healthNote: cow.healthNote,
+      distanceFromCenter: cow.distanceFromCenter,
+      distanceToFence: cow.distanceToFence,
+      isStray: cow.isStray,
+      lastSeenTs: cow.lastSeenTs,
+    },
+    geometry: { type: "Point", coordinates: [cow.lon, cow.lat] },
   };
 }
 
@@ -106,11 +207,14 @@ export function PastureMap({
   const onSelectCowRef = useRef(onSelectCow);
   const optionsRef = useRef(options);
   const onDrawReadyRef = useRef(onDrawReady);
+  const pasturesRef = useRef(pastures);
+  const boundaryRef = useRef(boundary);
   const [groupSelectionIds, setGroupSelectionIds] = useState([]);
   const [activePastureId, setActivePastureId] = useState(null);
   const [pastureNameDraft, setPastureNameDraft] = useState("");
   const [drawReadyInternal, setDrawReadyInternal] = useState(false);
   const [activeDrawMode, setActiveDrawMode] = useState("simple_select");
+  const hasFitInitialBoundsRef = useRef(false);
 
   useEffect(() => {
     cowsRef.current = cows;
@@ -123,6 +227,14 @@ export function PastureMap({
   useEffect(() => {
     onSelectCowRef.current = onSelectCow;
   }, [onSelectCow]);
+
+  useEffect(() => {
+    pasturesRef.current = pastures;
+  }, [pastures]);
+
+  useEffect(() => {
+    boundaryRef.current = boundary;
+  }, [boundary]);
 
   const overlayCow = groupSelectionIds.length
     ? null
@@ -212,6 +324,87 @@ export function PastureMap({
     };
 
     let cancelled = false;
+    let handlersAttached = false;
+
+    const attachLayerInteractions = (map) => {
+      if (handlersAttached) return;
+      handlersAttached = true;
+
+      const handleSelectPasture = (event) => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+        const id = feature.properties?.__id ?? feature.id;
+        setActivePastureId(id ?? null);
+      };
+
+      const pointerEnter = () => {
+        map.getCanvas().style.cursor = "pointer";
+      };
+      const pointerLeave = () => {
+        map.getCanvas().style.cursor = "";
+      };
+
+      ["paddock-fill", "paddock-outline", "paddock-label"].forEach((layerId) => {
+        map.on("click", layerId, handleSelectPasture);
+        map.on("mouseenter", layerId, pointerEnter);
+        map.on("mouseleave", layerId, pointerLeave);
+      });
+
+      map.on("click", "cow-dots", (event) => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+        const cow = cowsRef.current.find((item) => item.id === feature.properties?.id);
+        if (!cow) return;
+        setGroupSelectionIds([]);
+        onSelectCowRef.current?.(cow);
+      });
+      map.on("mouseenter", "cow-dots", pointerEnter);
+      map.on("mouseleave", "cow-dots", pointerLeave);
+    };
+
+    const applyTerrainEnhancements = (map) => {
+      if (map.setProjection) {
+        map.setProjection({ name: "globe" });
+      }
+      if (!map.getSource(mapboxTerrainSourceId)) {
+        if (hasMapboxToken) {
+          map.addSource(mapboxTerrainSourceId, {
+            type: "raster-dem",
+            url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+            tileSize: 512,
+            maxzoom: 14,
+          });
+        } else {
+          map.addSource(mapboxTerrainSourceId, {
+            type: "raster-dem",
+            tiles: ["https://demotiles.maplibre.org/terrain-tiles/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            maxzoom: 12,
+          });
+        }
+      }
+      map.setTerrain({ source: mapboxTerrainSourceId, exaggeration: hasMapboxToken ? 1.5 : 1.25 });
+      map.setFog({
+        range: [0.6, 8],
+        color: "#0b1220",
+        "high-color": hasMapboxToken ? "#1f2937" : "#1f2937",
+        "horizon-blend": 0.4,
+        "space-color": "#020617",
+        "star-intensity": hasMapboxToken ? 0.12 : 0.08,
+      });
+      if (!map.getLayer(skyLayerId)) {
+        map.addLayer({
+          id: skyLayerId,
+          type: "sky",
+          paint: {
+            "sky-type": "atmosphere",
+            "sky-atmosphere-color": "#0f172a",
+            "sky-atmosphere-sun": [0.0, 0.0],
+            "sky-atmosphere-sun-intensity": 12,
+          },
+        });
+      }
+    };
 
     loadDraw()
       .catch(() => null)
@@ -220,36 +413,31 @@ export function PastureMap({
 
         const map = new maplibregl.Map({
           container: mapContainerRef.current,
-          style: createStyle(),
+          style: createFallbackStyle(),
           center: [ranchCenter.lon, ranchCenter.lat],
-          zoom: 16,
+          zoom: hasMapboxToken ? 13.6 : 15.2,
+          pitch: hasMapboxToken ? 47 : 0,
+          bearing: hasMapboxToken ? -18 : 0,
           attributionControl: true,
         });
-        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-        let draw = null;
-        if (DrawCtor) {
-          draw = new DrawCtor({ displayControlsDefault: false, controls: {}, defaultMode: "simple_select" });
-          map.addControl(draw, "top-left");
-          drawRef.current = draw;
-          setDrawReadyInternal(true);
-          setActiveDrawMode(draw?.getMode ? draw.getMode() : "simple_select");
-          draw?.on("draw.modechange", (event) => {
-            setActiveDrawMode(event.mode);
-          });
-          onDrawReadyRef.current?.(true);
-        } else {
-          onDrawReadyRef.current?.(false);
-          setDrawReadyInternal(false);
+        if (hasMapboxToken && map.setProjection) {
+          map.setProjection({ name: "globe" });
         }
 
+        mapRef.current = map;
+
+        map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
+
+        let drawInstance = null;
+
         const handleDrawChange = () => {
-          if (!draw || suppressDrawEventsRef.current) return;
-          const collection = draw.getAll();
+          if (!drawInstance || suppressDrawEventsRef.current) return;
+          const collection = drawInstance.getAll();
           const features = collection.features.map((feature, index) => {
             const name = feature.properties?.name ?? `Pasture ${index + 1}`;
-            draw.setFeatureProperty(feature.id, "name", name);
-            draw.setFeatureProperty(feature.id, "__id", feature.id);
+            drawInstance.setFeatureProperty(feature.id, "name", name);
+            drawInstance.setFeatureProperty(feature.id, "__id", feature.id);
             return { ...feature, properties: { ...feature.properties, name, __id: feature.id } };
           });
           const newest = features.at(-1);
@@ -261,193 +449,235 @@ export function PastureMap({
           onPasturesChangeRef.current?.(features);
         };
 
-        map.on("load", () => {
-          map.addSource(paddockSourceId, { type: "geojson", data: getFeatureCollection(pastures) });
-          map.addLayer({
-            id: "paddock-fill",
-            type: "fill",
-            source: paddockSourceId,
-        paint: { "fill-color": "#22c55e", "fill-opacity": 0.12 },
-      });
-      map.addLayer({
-        id: "paddock-outline",
-        type: "line",
-        source: paddockSourceId,
-        paint: { "line-color": "#22c55e", "line-width": 1.5 },
-      });
-      map.addLayer({
-        id: activePastureLayerId,
-        type: "line",
-        source: paddockSourceId,
-        paint: {
-          "line-color": "#f97316",
-          "line-width": 3,
-          "line-opacity": 0.85,
-        },
-        filter: ["==", ["get", "__id"], ""],
-      });
-      map.addLayer({
-        id: "paddock-label",
-        type: "symbol",
-        source: paddockSourceId,
-        layout: { "text-field": ["get", "name"], "text-size": 12 },
-        paint: { "text-color": "#e5e7eb", "text-halo-color": "#111827", "text-halo-width": 1 },
-      });
-
-      const handleSelectPasture = (event) => {
-        const feature = event.features?.[0];
-        if (!feature) return;
-        const id = feature.properties?.__id ?? feature.id;
-        setActivePastureId(id ?? null);
-      };
-
-      map.on("click", "paddock-fill", handleSelectPasture);
-      map.on("click", "paddock-outline", handleSelectPasture);
-      map.on("click", "paddock-label", handleSelectPasture);
-      map.on("mouseenter", "paddock-fill", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "paddock-fill", () => {
-        map.getCanvas().style.cursor = "";
-      });
-      map.on("mouseenter", "paddock-outline", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "paddock-outline", () => {
-        map.getCanvas().style.cursor = "";
-      });
-      map.on("mouseenter", "paddock-label", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "paddock-label", () => {
-        map.getCanvas().style.cursor = "";
-      });
-
-      map.addSource(ranchSourceId, { type: "geojson", data: boundary ?? getFeatureCollection() });
-      map.addLayer({ id: "ranch-outline", type: "line", source: ranchSourceId, paint: { "line-color": "#60a5fa", "line-width": 2 } });
-
-      map.addSource(cowsSourceId, { type: "geojson", data: getFeatureCollection() });
-      map.addLayer({
-        id: "cow-dots",
-        type: "circle",
-        source: cowsSourceId,
-        paint: {
-          "circle-radius": [
-            "case",
-            ["==", ["get", "isStray"], true],
-            5.5,
-            4,
-          ],
-          "circle-color": [
-            "case",
-            ["==", ["get", "isStray"], true],
-            "#f87171",
-            "#fde68a",
-          ],
-          "circle-stroke-color": [
-            "case",
-            ["==", ["get", "isStray"], true],
-            "#b91c1c",
-            "#78350f",
-          ],
-          "circle-stroke-width": 1.25,
-        },
-      });
-
-      map.addLayer({
-        id: selectedCowLayerId,
-        type: "circle",
-        source: cowsSourceId,
-        paint: {
-          "circle-radius": 10,
-          "circle-color": "#facc15",
-          "circle-opacity": 0.25,
-          "circle-stroke-color": "#fde68a",
-          "circle-stroke-width": 2,
-          "circle-blur": 0.4,
-        },
-        filter: ["==", ["get", "id"], ""],
-      });
-
-      map.addSource(trailsSourceId, { type: "geojson", data: getFeatureCollection() });
-      map.addLayer({
-        id: "cow-trails",
-        type: "line",
-        source: trailsSourceId,
-        layout: { visibility: optionsRef.current.breadcrumbs ? "visible" : "none" },
-        paint: { "line-color": "#eab308", "line-width": 1.2, "line-opacity": 0.6 },
-      });
-
-      map.addSource(heatmapSourceId, { type: "geojson", data: getFeatureCollection() });
-      map.addLayer({
-        id: "cow-heatmap",
-        type: "heatmap",
-        source: heatmapSourceId,
-        maxzoom: 18,
-        paint: {
-          "heatmap-weight": 0.5,
-          "heatmap-intensity": 1.4,
-          "heatmap-radius": 24,
-          "heatmap-opacity": 0.55,
-          "heatmap-color": [
-            "interpolate",
-            ["linear"],
-            ["heatmap-density"],
-            0,
-            "rgba(0,0,0,0)",
-            0.3,
-            "rgba(22,163,74,0.3)",
-            0.6,
-            "rgba(250,204,21,0.5)",
-            1,
-            "rgba(239,68,68,0.6)",
-          ],
-        },
-        layout: { visibility: optionsRef.current.heatmap ? "visible" : "none" },
-      });
-
-          draw?.on("draw.create", handleDrawChange);
-          draw?.on("draw.update", handleDrawChange);
-          draw?.on("draw.delete", handleDrawChange);
-
-          map.on("click", "cow-dots", (event) => {
-            const feature = event.features?.[0];
-            if (!feature) return;
-            const cow = cowsRef.current.find((item) => item.id === feature.properties?.id);
-            if (!cow) return;
-            setGroupSelectionIds([]);
-            onSelectCowRef.current?.(cow);
+        if (DrawCtor) {
+          drawInstance = new DrawCtor({
+            displayControlsDefault: false,
+            controls: {},
+            defaultMode: "simple_select",
+            styles: drawStyles,
           });
-
-      map.on("mouseenter", "cow-dots", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "cow-dots", () => {
-        map.getCanvas().style.cursor = "";
-      });
-
-          map.on("boxzoomend", (event) => {
-            const bounds = event?.boxZoomBounds;
-            if (!bounds) return;
-            const selected = cowsRef.current.filter(
-              (cow) =>
-                cow.lon >= bounds.getWest() &&
-                cow.lon <= bounds.getEast() &&
-                cow.lat >= bounds.getSouth() &&
-                cow.lat <= bounds.getNorth(),
-            );
-            const ids = selected.map((cow) => cow.id);
-            setGroupSelectionIds(ids);
-            if (ids.length) {
-              onSelectCowRef.current?.(null);
-            }
+          map.addControl(drawInstance, "top-left");
+          drawRef.current = drawInstance;
+          setDrawReadyInternal(true);
+          setActiveDrawMode(drawInstance?.getMode ? drawInstance.getMode() : "simple_select");
+          drawInstance?.on("draw.modechange", (event) => {
+            setActiveDrawMode(event.mode);
           });
+          drawInstance?.on("draw.create", handleDrawChange);
+          drawInstance?.on("draw.update", handleDrawChange);
+          drawInstance?.on("draw.delete", handleDrawChange);
+          onDrawReadyRef.current?.(true);
+        } else {
+          drawRef.current = null;
+          setDrawReadyInternal(false);
+          setActiveDrawMode("simple_select");
+          onDrawReadyRef.current?.(false);
+        }
 
-          const bounds = computeBounds(boundary ?? getFeatureCollection());
-          map.fitBounds(bounds, { padding: 40, maxZoom: 18 });
+        const ensureCustomLayers = () => {
+          const pastureCollection = getFeatureCollection(pasturesRef.current ?? []);
+          if (!map.getSource(paddockSourceId)) {
+            map.addSource(paddockSourceId, { type: "geojson", data: pastureCollection });
+          } else {
+            map.getSource(paddockSourceId).setData(pastureCollection);
+          }
+
+          if (!map.getLayer("paddock-fill")) {
+            map.addLayer({
+              id: "paddock-fill",
+              type: "fill",
+              source: paddockSourceId,
+              paint: { "fill-color": "#22c55e", "fill-opacity": 0.075 },
+            });
+          }
+
+          if (!map.getLayer("paddock-outline")) {
+            map.addLayer({
+              id: "paddock-outline",
+              type: "line",
+              source: paddockSourceId,
+              paint: { "line-color": "#22c55e", "line-width": 1.2, "line-opacity": 0.85 },
+            });
+          }
+
+          if (!map.getLayer(activePastureLayerId)) {
+            map.addLayer({
+              id: activePastureLayerId,
+              type: "line",
+              source: paddockSourceId,
+              paint: {
+                "line-color": "#f97316",
+                "line-width": 2.6,
+                "line-opacity": 0.9,
+              },
+              filter: ["==", ["get", "__id"], ""],
+            });
+          }
+
+          if (!map.getLayer("paddock-label")) {
+            map.addLayer({
+              id: "paddock-label",
+              type: "symbol",
+              source: paddockSourceId,
+              layout: { "text-field": ["get", "name"], "text-size": 12 },
+              paint: {
+                "text-color": "#e5e7eb",
+                "text-halo-color": "#111827",
+                "text-halo-width": 1.2,
+              },
+            });
+          }
+
+          const ranchData = boundaryRef.current ?? boundary ?? getFeatureCollection();
+          if (!map.getSource(ranchSourceId)) {
+            map.addSource(ranchSourceId, { type: "geojson", data: ranchData });
+          } else {
+            map.getSource(ranchSourceId).setData(ranchData);
+          }
+          if (!map.getLayer("ranch-outline")) {
+            map.addLayer({
+              id: "ranch-outline",
+              type: "line",
+              source: ranchSourceId,
+              paint: { "line-color": "#60a5fa", "line-width": 1.8, "line-dasharray": [1.5, 1.5] },
+            });
+          }
+
+          const cowCollection = {
+            type: "FeatureCollection",
+            features: (cowsRef.current ?? []).map(cowToFeature),
+          };
+          if (!map.getSource(cowsSourceId)) {
+            map.addSource(cowsSourceId, { type: "geojson", data: cowCollection });
+          } else {
+            map.getSource(cowsSourceId).setData(cowCollection);
+          }
+
+          if (!map.getSource(trailsSourceId)) {
+            map.addSource(trailsSourceId, { type: "geojson", data: getFeatureCollection() });
+          }
+
+          if (!map.getSource(heatmapSourceId)) {
+            map.addSource(heatmapSourceId, { type: "geojson", data: getFeatureCollection() });
+          }
+
+          if (!map.getLayer("cow-heatmap")) {
+            map.addLayer({
+              id: "cow-heatmap",
+              type: "heatmap",
+              source: heatmapSourceId,
+              maxzoom: 18,
+              paint: {
+                "heatmap-weight": 0.5,
+                "heatmap-intensity": 1.4,
+                "heatmap-radius": 22,
+                "heatmap-opacity": 0.55,
+                "heatmap-color": [
+                  "interpolate",
+                  ["linear"],
+                  ["heatmap-density"],
+                  0,
+                  "rgba(0,0,0,0)",
+                  0.3,
+                  "rgba(22,163,74,0.32)",
+                  0.6,
+                  "rgba(250,204,21,0.5)",
+                  1,
+                  "rgba(239,68,68,0.65)",
+                ],
+              },
+              layout: { visibility: optionsRef.current.heatmap ? "visible" : "none" },
+            });
+          }
+
+          if (!map.getLayer("cow-trails")) {
+            map.addLayer({
+              id: "cow-trails",
+              type: "line",
+              source: trailsSourceId,
+              layout: { visibility: optionsRef.current.breadcrumbs ? "visible" : "none" },
+              paint: { "line-color": "#facc15", "line-width": 1.1, "line-opacity": 0.62 },
+            });
+          }
+
+          if (!map.getLayer("cow-dots")) {
+            map.addLayer({
+              id: "cow-dots",
+              type: "circle",
+              source: cowsSourceId,
+              paint: {
+                "circle-radius": [
+                  "case",
+                  ["==", ["get", "isStray"], true],
+                  6.5,
+                  4.8,
+                ],
+                "circle-color": [
+                  "case",
+                  ["==", ["get", "isStray"], true],
+                  "#f87171",
+                  "#fef08a",
+                ],
+                "circle-stroke-color": [
+                  "case",
+                  ["==", ["get", "isStray"], true],
+                  "#b91c1c",
+                  "#92400e",
+                ],
+                "circle-stroke-width": 1.6,
+                "circle-opacity": 0.95,
+              },
+            });
+          }
+
+          if (!map.getLayer(selectedCowLayerId)) {
+            map.addLayer({
+              id: selectedCowLayerId,
+              type: "circle",
+              source: cowsSourceId,
+              paint: {
+                "circle-radius": 11,
+                "circle-color": "#facc15",
+                "circle-opacity": 0.2,
+                "circle-stroke-color": "#fde68a",
+                "circle-stroke-width": 2.2,
+                "circle-blur": 0.3,
+              },
+              filter: ["==", ["get", "id"], ""],
+            });
+          }
+
+          if (!hasFitInitialBoundsRef.current) {
+            const bounds = computeBounds(ranchData ?? getFeatureCollection());
+            map.fitBounds(bounds, { padding: 64, maxZoom: 18 });
+            hasFitInitialBoundsRef.current = true;
+          }
+
+          attachLayerInteractions(map);
+          applyTerrainEnhancements(map);
+        };
+
+        map.on("load", ensureCustomLayers);
+
+        map.on("boxzoomend", (event) => {
+          const bounds = event?.boxZoomBounds;
+          if (!bounds) return;
+          const selected = cowsRef.current.filter(
+            (cow) =>
+              cow.lon >= bounds.getWest() &&
+              cow.lon <= bounds.getEast() &&
+              cow.lat >= bounds.getSouth() &&
+              cow.lat <= bounds.getNorth(),
+          );
+          const ids = selected.map((cow) => cow.id);
+          setGroupSelectionIds(ids);
+          if (ids.length) {
+            onSelectCowRef.current?.(null);
+          }
         });
-
-        mapRef.current = map;
+      })
+      .catch(() => {
+        onDrawReadyRef.current?.(false);
       });
 
     return () => {
@@ -460,6 +690,7 @@ export function PastureMap({
         mapRef.current.remove();
         mapRef.current = null;
       }
+      hasFitInitialBoundsRef.current = false;
     };
   }, []);
 
@@ -489,29 +720,7 @@ export function PastureMap({
     if (source) {
       source.setData({
         type: "FeatureCollection",
-        features: cows.map((cow) => ({
-          type: "Feature",
-          properties: {
-            id: cow.id,
-            tag: cow.tag,
-            weight: cow.weight,
-            bodyCondition: cow.bodyCondition,
-            lastCheck: cow.lastCheck,
-            notes: cow.notes,
-            lastTreatment: cow.lastTreatment,
-            breed: cow.breed,
-            ageYears: cow.ageYears,
-            pregnancy: cow.pregnancy,
-            avgDailyGain: cow.avgDailyGain,
-            temperature: cow.temperature,
-            healthNote: cow.healthNote,
-            distanceFromCenter: cow.distanceFromCenter,
-            distanceToFence: cow.distanceToFence,
-            isStray: cow.isStray,
-            lastSeenTs: cow.lastSeenTs,
-          },
-          geometry: { type: "Point", coordinates: [cow.lon, cow.lat] },
-        })),
+        features: cows.map(cowToFeature),
       });
     }
 

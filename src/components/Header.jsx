@@ -95,6 +95,14 @@ export function Header({ telemetry, herd, user, onLogout }) {
     },
   ];
 
+  const uniqueStatuses = [];
+  const seenStatusIds = new Set();
+  for (const status of statuses) {
+    if (seenStatusIds.has(status.id)) continue;
+    seenStatusIds.add(status.id);
+    uniqueStatuses.push(status);
+  }
+
   return (
     <header className="sticky top-0 z-20 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4">
@@ -111,7 +119,7 @@ export function Header({ telemetry, herd, user, onLogout }) {
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/80 px-3 py-2">
               <div className="text-[10px] uppercase tracking-[0.35em] text-neutral-500">Sensor status</div>
               <div className="mt-2 flex flex-wrap gap-3">
-                {statuses.map((status) => (
+                {uniqueStatuses.map((status) => (
                   <SensorStatus key={status.id} {...status} />
                 ))}
               </div>
