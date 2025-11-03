@@ -33,7 +33,7 @@ function paddocksToFeatures(paddocks) {
   }));
 }
 
-export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, onNotify, reportStatus, onSendReport }) {
+export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNotify, reportStatus, onSendReport }) {
   const [expandedPanel, setExpandedPanel] = useState(null);
   const [address, setAddress] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -157,7 +157,6 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
     <TelemetryPanel
       telemetry={telemetry}
       sms={sms}
-      selectedCow={selectedCow}
       variant={variant}
       className={variant === "expanded" ? "p-5" : "flex-1 p-3"}
       reportStatus={reportStatus}
@@ -406,7 +405,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
   return (
     <>
       <motion.section
-        key="ops"
+        key="dashboard"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
