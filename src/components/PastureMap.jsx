@@ -10,6 +10,7 @@ const heatmapSourceId = "cow-heatmap";
 const paddockSourceId = "paddocks";
 const ranchSourceId = "ranch-bounds";
 const selectedCowLayerId = "cow-selected";
+const activePastureLayerId = "paddock-active";
 
 function createStyle() {
   if (!hasMapboxToken) {
@@ -105,6 +106,8 @@ export function PastureMap({
   const optionsRef = useRef(options);
   const onDrawReadyRef = useRef(onDrawReady);
   const [groupSelectionIds, setGroupSelectionIds] = useState([]);
+  const [activePastureId, setActivePastureId] = useState(null);
+  const [pastureNameDraft, setPastureNameDraft] = useState("");
 
   useEffect(() => {
     cowsRef.current = cows;
@@ -125,6 +128,11 @@ export function PastureMap({
   const groupSelection = useMemo(
     () => cows.filter((cow) => groupSelectionIds.includes(cow.id)),
     [cows, groupSelectionIds],
+  );
+
+  const activePasture = useMemo(
+    () => pastures.find((feature) => feature.id === activePastureId) ?? null,
+    [pastures, activePastureId],
   );
 
   const groupStats = useMemo(() => {
@@ -175,6 +183,20 @@ export function PastureMap({
   useEffect(() => {
     optionsRef.current = options;
   }, [options]);
+
+  useEffect(() => {
+    if (activePastureId && !pastures.some((feature) => feature.id === activePastureId)) {
+      setActivePastureId(null);
+    }
+  }, [pastures, activePastureId]);
+
+  useEffect(() => {
+    if (activePasture) {
+      setPastureNameDraft(activePasture.properties?.name ?? "");
+    } else {
+      setPastureNameDraft("");
+    }
+  }, [activePasture]);
 
   useEffect(() => {
     onDrawReadyRef.current = onDrawReady;
@@ -230,8 +252,15 @@ export function PastureMap({
           const features = collection.features.map((feature, index) => {
             const name = feature.properties?.name ?? `Pasture ${index + 1}`;
             draw.setFeatureProperty(feature.id, "name", name);
-            return { ...feature, properties: { ...feature.properties, name } };
+            draw.setFeatureProperty(feature.id, "__id", feature.id);
+            return { ...feature, properties: { ...feature.properties, name, __id: feature.id } };
           });
+          const newest = features.at(-1);
+          if (newest) {
+            setActivePastureId(newest.id ?? newest.properties?.__id ?? null);
+          } else {
+            setActivePastureId(null);
+          }
           onPasturesChangeRef.current?.(features);
         };
 
@@ -250,11 +279,51 @@ export function PastureMap({
         paint: { "line-color": "#22c55e", "line-width": 1.5 },
       });
       map.addLayer({
+        id: activePastureLayerId,
+        type: "line",
+        source: paddockSourceId,
+        paint: {
+          "line-color": "#f97316",
+          "line-width": 3,
+          "line-opacity": 0.85,
+        },
+        filter: ["==", ["get", "__id"], ""],
+      });
+      map.addLayer({
         id: "paddock-label",
         type: "symbol",
         source: paddockSourceId,
         layout: { "text-field": ["get", "name"], "text-size": 12 },
         paint: { "text-color": "#e5e7eb", "text-halo-color": "#111827", "text-halo-width": 1 },
+      });
+
+      const handleSelectPasture = (event) => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+        const id = feature.properties?.__id ?? feature.id;
+        setActivePastureId(id ?? null);
+      };
+
+      map.on("click", "paddock-fill", handleSelectPasture);
+      map.on("click", "paddock-outline", handleSelectPasture);
+      map.on("click", "paddock-label", handleSelectPasture);
+      map.on("mouseenter", "paddock-fill", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "paddock-fill", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      map.on("mouseenter", "paddock-outline", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "paddock-outline", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      map.on("mouseenter", "paddock-label", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "paddock-label", () => {
+        map.getCanvas().style.cursor = "";
       });
 
       map.addSource(ranchSourceId, { type: "geojson", data: boundary ?? getFeatureCollection() });
@@ -510,6 +579,18 @@ export function PastureMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (map.getLayer(activePastureLayerId)) {
+      if (activePastureId) {
+        map.setFilter(activePastureLayerId, ["==", ["get", "__id"], activePastureId]);
+      } else {
+        map.setFilter(activePastureLayerId, ["==", ["get", "__id"], ""]);
+      }
+    }
+  }, [activePastureId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
     const activeCow = selectedCow ?? cows.find((item) => item.id === selectedCowId);
     if (map.getLayer(selectedCowLayerId)) {
       if (groupSelectionIds.length > 0) {
@@ -548,6 +629,37 @@ export function PastureMap({
       ],
       { padding: 120, maxZoom: 18, duration: 800 },
     );
+  };
+
+  const handleRenamePasture = (event) => {
+    if (event) event.preventDefault();
+    if (!activePastureId) return;
+    const nextName = pastureNameDraft.trim();
+    if (!nextName) return;
+    const updated = pastures.map((feature) =>
+      feature.id === activePastureId
+        ? {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              name: nextName,
+              __id: feature.properties?.__id ?? feature.id,
+            },
+          }
+        : feature,
+    );
+    onPasturesChangeRef.current?.(updated);
+  };
+
+  const handleDeletePasture = () => {
+    if (!activePastureId) return;
+    const filtered = pastures.filter((feature) => feature.id !== activePastureId);
+    setActivePastureId(null);
+    onPasturesChangeRef.current?.(filtered);
+  };
+
+  const handleClosePasture = () => {
+    setActivePastureId(null);
   };
 
   return (
@@ -655,6 +767,61 @@ export function PastureMap({
         </div>
       )}
       <div ref={mapContainerRef} className="h-full w-full" />
+      {activePasture && (
+        <div className="pointer-events-none absolute left-3 bottom-3 z-20 w-72 max-w-[calc(100%-1.5rem)]">
+          <form
+            onSubmit={handleRenamePasture}
+            className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-emerald-300">Pasture tools</div>
+                <div className="mt-1 text-sm font-semibold text-neutral-50">
+                  {activePasture.properties?.name || "Untitled pasture"}
+                </div>
+                <div className="text-[11px] text-neutral-400">
+                  {activePasture.properties?.acres ? `${activePasture.properties.acres.toFixed(1)} acres` : "Area calculating…"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClosePasture}
+                className="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] uppercase tracking-wide text-neutral-300 hover:border-emerald-500/50"
+              >
+                Close
+              </button>
+            </div>
+            <label className="mt-3 flex flex-col gap-1 text-[11px] text-neutral-400">
+              Rename pasture
+              <input
+                type="text"
+                value={pastureNameDraft}
+                onChange={(event) => setPastureNameDraft(event.target.value)}
+                className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 focus:border-emerald-500 focus:outline-none"
+                placeholder="North lot"
+              />
+            </label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/20"
+              >
+                Save name
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePasture}
+                className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-100 hover:bg-rose-500/20"
+              >
+                Delete
+              </button>
+            </div>
+            <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/80 p-2 text-[11px] text-neutral-400">
+              Click a pasture to edit its shape, rename it, or delete it. Use the draw tools to add another grazing cell.
+            </div>
+          </form>
+        </div>
+      )}
       {straySummary && (
         <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-xs flex-col gap-2">
           <div className="pointer-events-auto rounded-2xl border border-amber-500/40 bg-neutral-950/95 p-3 text-xs text-amber-100 shadow-lg backdrop-blur">
