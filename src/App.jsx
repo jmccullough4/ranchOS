@@ -4,6 +4,7 @@ import { useHerd } from "./hooks/useHerd.js";
 import { useTelemetry } from "./hooks/useTelemetry.js";
 import { formatNow } from "./utils/time.js";
 import { DemoToast } from "./components/DemoToast.jsx";
+import { LoginScreen } from "./components/LoginScreen.jsx";
 import { EidTab } from "./components/EidTab.jsx";
 import { Footer } from "./components/Footer.jsx";
 import { Header } from "./components/Header.jsx";
@@ -15,6 +16,7 @@ export default function App() {
   const [rows, setRows] = useState([]);
   const [options, setOptions] = useState({ basemap: "satellite", breadcrumbs: true, heatmap: true });
   const [reportStatus, setReportStatus] = useState(null);
+  const [user, setUser] = useState(null);
 
   const telemetry = useTelemetry(1000);
   const herd = useHerd(50, 1000);
@@ -50,9 +52,23 @@ export default function App() {
     setToastMessage(`Herd status report dispatched via ${formatted}.`);
   };
 
+  if (!user) {
+    return (
+      <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
+        <LoginScreen
+          onLogin={(profile) => {
+            setUser(profile);
+            setToastMessage(`Welcome back, ${profile.name}!`);
+          }}
+        />
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
-      <Header activeTab={activeTab} onTabChange={setActiveTab} />
+      <Header activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={() => setUser(null)} />
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         <AnimatePresence mode="wait">

@@ -6,6 +6,7 @@ import { CameraFeed } from "./CameraFeed.jsx";
 import { PastureMap } from "./PastureMap.jsx";
 import { TelemetryPanel } from "./TelemetryPanel.jsx";
 import { polygonAreaInAcres } from "../utils/geo.js";
+import { formatRelativeFromNow } from "../utils/time.js";
 
 const cameraFeeds = [
   { label: "CAM 1 — East Gate", src: "/cam1.mp4" },
@@ -130,6 +131,14 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
       })),
     [pastures],
   );
+
+  const strayCows = useMemo(() => {
+    const list = herd.cows.filter((cow) => cow.isStray);
+    return list
+      .slice()
+      .sort((a, b) => a.distanceToFence - b.distanceToFence)
+      .slice(0, 6);
+  }, [herd.cows]);
 
   const renderCameraPanel = (variant) => {
     const isExpanded = variant === "expanded";
@@ -274,6 +283,47 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 </div>
               ))}
             </div>
+            {strayCows.length > 0 ? (
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-amber-300">Stray watch</div>
+                    <div className="text-xs text-amber-200">{strayCows.length} animal{strayCows.length === 1 ? "" : "s"} flagged</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCowId(strayCows[0].id)}
+                    className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/20"
+                  >
+                    Focus first
+                  </button>
+                </div>
+                <ul className="mt-2 flex flex-col gap-2">
+                  {strayCows.map((cow) => (
+                    <li key={cow.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCowId(cow.id)}
+                        className="flex w-full flex-col gap-1 rounded-xl border border-amber-500/30 bg-neutral-900/80 px-3 py-2 text-left text-[11px] text-amber-100 hover:border-amber-400"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-amber-200">{cow.tag}</span>
+                          <span className="text-[10px] text-amber-300">{formatRelativeFromNow(cow.lastSeenTs)}</span>
+                        </div>
+                        <div className="text-[10px] text-amber-200">
+                          {cow.id} · Fence {Math.max(0, Math.round(cow.distanceToFence))} m · Hub {Math.round(cow.distanceFromCenter)} m
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+                <div className="text-[10px] uppercase tracking-wide text-emerald-300">Stray watch</div>
+                <div className="mt-1 text-xs">All animals within safe radius.</div>
+              </div>
+            )}
             {selectedCow && (
               <div className="rounded-2xl border border-emerald-600/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">
                 <div className="text-xs uppercase tracking-wide text-emerald-300">Selected animal</div>
@@ -281,9 +331,25 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 <div className="mt-1 grid gap-1 text-xs md:grid-cols-2">
                   <div>Weight: {selectedCow.weight} lb</div>
                   <div>Body condition: {selectedCow.bodyCondition}</div>
+                  <div>Distance to hub: {Math.round(selectedCow.distanceFromCenter)} m</div>
+                  <div>Nearest fence: {Math.round(selectedCow.distanceToFence)} m</div>
                   <div>Last check: {selectedCow.lastCheck}</div>
                   <div>Notes: {selectedCow.notes}</div>
                 </div>
+                {selectedCow.immunizations?.length ? (
+                  <div className="mt-2 space-y-1 text-[11px]">
+                    <div className="text-[10px] uppercase tracking-wide text-emerald-300">Immunizations</div>
+                    {selectedCow.immunizations.map((record) => (
+                      <div key={record.id} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1">
+                        <div className="flex items-center justify-between gap-2 text-emerald-100">
+                          <span className="font-semibold">{record.label}</span>
+                          <span className="text-[10px] text-emerald-200">{record.date}</span>
+                        </div>
+                        <div className="text-[10px] text-emerald-200/80">{record.category} · {record.location} · {record.lot}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
             {!hasMapboxToken && (
