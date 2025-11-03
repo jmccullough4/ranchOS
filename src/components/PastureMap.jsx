@@ -229,7 +229,7 @@ export function PastureMap({
 
         let draw = null;
         if (DrawCtor) {
-          draw = new DrawCtor({ displayControlsDefault: false, controls: { polygon: true, trash: true } });
+          draw = new DrawCtor({ displayControlsDefault: false, controls: {}, defaultMode: "simple_select" });
           map.addControl(draw, "top-left");
           drawRef.current = draw;
           setDrawReadyInternal(true);
@@ -632,7 +632,7 @@ export function PastureMap({
     draw.trash();
   };
 
-  const handleRenamePasture = (event) => {
+  const handleRenameActivePasture = (event) => {
     if (event) event.preventDefault();
     if (!activePastureId) return;
     const nextName = pastureNameDraft.trim();
@@ -652,45 +652,14 @@ export function PastureMap({
     onPasturesChangeRef.current?.(updated);
   };
 
-  const handleDeletePasture = () => {
+  const handleDeleteActivePasture = () => {
     if (!activePastureId) return;
     const filtered = pastures.filter((feature) => feature.id !== activePastureId);
     setActivePastureId(null);
     onPasturesChangeRef.current?.(filtered);
   };
 
-  const handleClosePasture = () => {
-    setActivePastureId(null);
-  };
-
-  const handleRenamePasture = (event) => {
-    if (event) event.preventDefault();
-    if (!activePastureId) return;
-    const nextName = pastureNameDraft.trim();
-    if (!nextName) return;
-    const updated = pastures.map((feature) =>
-      feature.id === activePastureId
-        ? {
-            ...feature,
-            properties: {
-              ...feature.properties,
-              name: nextName,
-              __id: feature.properties?.__id ?? feature.id,
-            },
-          }
-        : feature,
-    );
-    onPasturesChangeRef.current?.(updated);
-  };
-
-  const handleDeletePasture = () => {
-    if (!activePastureId) return;
-    const filtered = pastures.filter((feature) => feature.id !== activePastureId);
-    setActivePastureId(null);
-    onPasturesChangeRef.current?.(filtered);
-  };
-
-  const handleClosePasture = () => {
+  const handleCloseActivePasture = () => {
     setActivePastureId(null);
   };
 
@@ -835,7 +804,7 @@ export function PastureMap({
       {activePasture && (
         <div className="pointer-events-none absolute left-3 bottom-3 z-20 w-72 max-w-[calc(100%-1.5rem)]">
           <form
-            onSubmit={handleRenamePasture}
+            onSubmit={handleRenameActivePasture}
             className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur"
           >
             <div className="flex items-start justify-between gap-2">
@@ -850,7 +819,7 @@ export function PastureMap({
               </div>
               <button
                 type="button"
-                onClick={handleClosePasture}
+                onClick={handleCloseActivePasture}
                 className="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] uppercase tracking-wide text-neutral-300 hover:border-emerald-500/50"
               >
                 Close
@@ -875,7 +844,7 @@ export function PastureMap({
               </button>
               <button
                 type="button"
-                onClick={handleDeletePasture}
+                onClick={handleDeleteActivePasture}
                 className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-100 hover:bg-rose-500/20"
               >
                 Delete

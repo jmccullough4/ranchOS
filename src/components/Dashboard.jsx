@@ -52,7 +52,7 @@ export function Dashboard({
   onAddRow,
 }) {
   const mapSectionRef = useRef(null);
-  const address = defaultRanchAddress;
+  const [address, setAddress] = useState(defaultRanchAddress);
   const [boundary, setBoundary] = useState(defaultRanchBoundary);
   const [pastures, setPastures] = useState(() => paddocksToFeatures(defaultPaddocks));
   const [selectedCowId, setSelectedCowId] = useState(null);
@@ -96,6 +96,11 @@ export function Dashboard({
     setBoundary(defaultRanchBoundary);
     onNotify?.("Ranch boundary restored from hub record.");
     scrollMapIntoView();
+  };
+
+  const handleRestoreAddress = () => {
+    setAddress(defaultRanchAddress);
+    onNotify?.("Ranch address restored from hub record.");
   };
 
   const handleFocusStrays = () => {
@@ -178,10 +183,17 @@ export function Dashboard({
 
             <div className="flex flex-col gap-5 p-5">
               <div className="flex flex-col gap-3 rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <div>
+                <div className="flex-1">
                   <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Ranch address</div>
-                  <div className="mt-1 text-sm font-medium text-neutral-200">{address}</div>
-                  <div className="text-[11px] text-neutral-500">Auto-filled from saved hub parcel.</div>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(event) => setAddress(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-emerald-500 focus:outline-none"
+                    placeholder="7715 231st St E, Myakka City, FL"
+                    autoComplete="street-address"
+                  />
+                  <div className="mt-2 text-[11px] text-neutral-500">Auto-filled from the hub parcel record.</div>
                 </div>
                 <div className="flex flex-col gap-2 sm:items-end">
                   <button
@@ -190,6 +202,13 @@ export function Dashboard({
                     className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/20"
                   >
                     Recenter map
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRestoreAddress}
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-200 hover:border-emerald-500/40"
+                  >
+                    Restore address
                   </button>
                   <span className="text-[10px] text-neutral-500">Parcel boundary synced nightly.</span>
                 </div>
