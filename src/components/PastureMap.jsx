@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { ranchBounds, ranchCenter } from "../constants/ranch.js";
 import { hasMapboxToken, mapboxToken } from "../constants/map.js";
+import { formatRelativeFromNow } from "../utils/time.js";
 
 const cowsSourceId = "cows";
 const trailsSourceId = "cow-trails";
@@ -82,20 +83,47 @@ function computeBounds(featureCollection) {
 }
 
 function buildCowPopup(cow) {
+  const immunizationRows = cow.immunizations
+    ?.map(
+      (record) => `
+        <tr>
+          <td class="px-0.5 py-0.5 text-[10px] font-semibold text-neutral-200">${record.label}</td>
+          <td class="px-0.5 py-0.5 text-[10px] text-neutral-400">${record.date}</td>
+        </tr>
+      `,
+    )
+    .join("") ?? "";
+  const lastPing = formatRelativeFromNow(cow.lastSeenTs);
+
   return `
-    <div class="min-w-[180px] text-xs text-neutral-100">
+    <div class="min-w-[220px] text-xs text-neutral-100">
       <div class="text-[11px] uppercase tracking-wide text-emerald-300">${cow.tag} · ${cow.id}</div>
-      <div class="mt-1">Weight: <strong>${cow.weight} lb</strong></div>
-      <div class="mt-1">Body condition: <strong>${cow.bodyCondition}</strong></div>
-      <div class="mt-1">Breed: <strong>${cow.breed}</strong></div>
-      <div class="mt-1">Age: <strong>${cow.ageYears} yrs</strong></div>
-      <div class="mt-1">Pregnancy: <strong>${cow.pregnancy}</strong></div>
+      <div class="mt-1 grid grid-cols-2 gap-x-2 gap-y-1">
+        <div>Weight: <strong>${cow.weight} lb</strong></div>
+        <div>Condition: <strong>${cow.bodyCondition}</strong></div>
+        <div>Breed: <strong>${cow.breed}</strong></div>
+        <div>Age: <strong>${cow.ageYears} yrs</strong></div>
+        <div>Pregnancy: <strong>${cow.pregnancy}</strong></div>
+        <div>Avg gain: <strong>${cow.avgDailyGain} lb</strong></div>
+        <div>Distance hub: <strong>${Math.round(cow.distanceFromCenter)} m</strong></div>
+        <div>Nearest fence: <strong>${Math.round(cow.distanceToFence)} m</strong></div>
+      </div>
       <div class="mt-1">Last treatment: ${cow.lastTreatment}</div>
       <div class="mt-1">Last check: ${cow.lastCheck}</div>
-      <div class="mt-1">Avg daily gain: ${cow.avgDailyGain} lb</div>
+      <div class="mt-1">Last ping: ${lastPing}</div>
       <div class="mt-1">Temperature: ${cow.temperature} °F</div>
       <div class="mt-1">Notes: ${cow.notes}</div>
       <div class="mt-1">Health: ${cow.healthNote}</div>
+      ${immunizationRows
+        ? `<div class="mt-2">
+            <div class="text-[10px] uppercase tracking-wide text-neutral-400">Immunizations</div>
+            <table class="mt-1 w-full border-collapse">
+              <tbody>
+                ${immunizationRows}
+              </tbody>
+            </table>
+          </div>`
+        : ""}
     </div>
   `;
 }
@@ -232,10 +260,25 @@ export function PastureMap({
         type: "circle",
         source: cowsSourceId,
         paint: {
-          "circle-radius": 4,
-          "circle-color": "#fde68a",
-          "circle-stroke-color": "#78350f",
-          "circle-stroke-width": 1,
+          "circle-radius": [
+            "case",
+            ["==", ["get", "isStray"], true],
+            5.5,
+            4,
+          ],
+          "circle-color": [
+            "case",
+            ["==", ["get", "isStray"], true],
+            "#f87171",
+            "#fde68a",
+          ],
+          "circle-stroke-color": [
+            "case",
+            ["==", ["get", "isStray"], true],
+            "#b91c1c",
+            "#78350f",
+          ],
+          "circle-stroke-width": 1.25,
         },
       });
 
@@ -371,6 +414,10 @@ export function PastureMap({
             avgDailyGain: cow.avgDailyGain,
             temperature: cow.temperature,
             healthNote: cow.healthNote,
+            distanceFromCenter: cow.distanceFromCenter,
+            distanceToFence: cow.distanceToFence,
+            isStray: cow.isStray,
+            lastSeenTs: cow.lastSeenTs,
           },
           geometry: { type: "Point", coordinates: [cow.lon, cow.lat] },
         })),
@@ -472,6 +519,11 @@ export function PastureMap({
                 <div className="text-[11px] uppercase tracking-wide text-emerald-300">Focus animal</div>
                 <div className="mt-1 text-sm font-semibold text-neutral-50">{overlayCow.tag}</div>
                 <div className="text-[11px] text-neutral-400">{overlayCow.id}</div>
+                {overlayCow.isStray && (
+                  <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-200">
+                    Stray alert
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -506,6 +558,18 @@ export function PastureMap({
                 <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Last check</dt>
                 <dd className="text-sm text-neutral-100">{overlayCow.lastCheck}</dd>
               </div>
+              <div className="col-span-2">
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Last ping</dt>
+                <dd className="text-sm text-neutral-100">{formatRelativeFromNow(overlayCow.lastSeenTs)}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Distance to hub</dt>
+                <dd className="text-sm text-neutral-100">{Math.round(overlayCow.distanceFromCenter)} m</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Nearest fence</dt>
+                <dd className="text-sm text-neutral-100">{Math.round(overlayCow.distanceToFence)} m</dd>
+              </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Pregnancy</dt>
                 <dd className="text-sm text-neutral-100">{overlayCow.pregnancy}</dd>
@@ -526,6 +590,25 @@ export function PastureMap({
                 <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Health focus</dt>
                 <dd className="text-sm text-neutral-100">{overlayCow.healthNote}</dd>
               </div>
+              {overlayCow.immunizations && overlayCow.immunizations.length > 0 && (
+                <div className="col-span-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Immunizations</dt>
+                  <dd className="mt-1 flex flex-col gap-1">
+                    {overlayCow.immunizations.map((record) => (
+                      <div
+                        key={record.id}
+                        className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-300"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-neutral-100">{record.label}</span>
+                          <span className="text-[10px] text-neutral-500">{record.date}</span>
+                        </div>
+                        <div className="text-[10px] text-neutral-400">{record.category} · {record.location} · {record.lot}</div>
+                      </div>
+                    ))}
+                  </dd>
+                </div>
+              )}
             </dl>
           </div>
         </div>

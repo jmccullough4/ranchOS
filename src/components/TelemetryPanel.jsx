@@ -1,5 +1,6 @@
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Field } from "./Field.jsx";
+import { formatRelativeFromNow } from "../utils/time.js";
 
 export function TelemetryPanel({
   telemetry,
@@ -97,9 +98,26 @@ export function TelemetryPanel({
               <div>Temperature: {selectedCow.temperature} °F</div>
               <div>Last treatment: {selectedCow.lastTreatment}</div>
               <div className="md:col-span-2">Last check: {selectedCow.lastCheck}</div>
+              <div>Nearest fence: {Math.round(selectedCow.distanceToFence)} m</div>
+              <div>Hub distance: {Math.round(selectedCow.distanceFromCenter)} m</div>
+              <div className="md:col-span-2">Last ping: {formatRelativeFromNow(selectedCow.lastSeenTs)}</div>
               <div className="md:col-span-2">Notes: {selectedCow.notes}</div>
               <div className="md:col-span-2">Health focus: {selectedCow.healthNote}</div>
             </div>
+            {selectedCow.immunizations?.length ? (
+              <div className="mt-2 space-y-1 text-[11px]">
+                <div className="text-[10px] uppercase tracking-wide text-emerald-300">Immunization log</div>
+                {selectedCow.immunizations.map((record) => (
+                  <div key={record.id} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">{record.label}</span>
+                      <span className="text-[10px] text-emerald-200">{record.date}</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-200/80">{record.category} · {record.location} · {record.lot}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
         <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300">

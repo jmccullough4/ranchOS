@@ -20,3 +20,30 @@ export function polygonAreaInAcres(coords) {
   }
   return Math.abs(area / 2) / SQUARE_METERS_PER_ACRE;
 }
+
+export function distanceInMeters(a, b) {
+  if (!a || !b) return 0;
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const haversine =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  return EARTH_RADIUS_METERS * c;
+}
+
+export function distanceToFenceMeters(point, bounds) {
+  if (!point || !bounds) return 0;
+  const { lon, lat } = point;
+  if (typeof lon !== "number" || typeof lat !== "number") return 0;
+  const { minLon, maxLon, minLat, maxLat } = bounds;
+  const distances = [
+    distanceInMeters({ lon, lat }, { lon, lat: minLat }),
+    distanceInMeters({ lon, lat }, { lon, lat: maxLat }),
+    distanceInMeters({ lon, lat }, { lon: minLon, lat }),
+    distanceInMeters({ lon, lat }, { lon: maxLon, lat }),
+  ];
+  return Math.min(...distances.filter((value) => Number.isFinite(value)));
+}
