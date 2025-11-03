@@ -50,14 +50,12 @@ function SensorStatus({ label, value, detail, tone, icon = null }) {
 
 export function Header({ telemetry, herd, user, onLogout }) {
   const displayName = user?.name ?? user?.username ?? "";
-  const strayCount = herd.cows.filter((cow) => cow.isStray).length;
-  const strayTone = strayCount > 4 ? "critical" : strayCount > 0 ? "warning" : "nominal";
   const networkTone =
     telemetry.networkHealth <= 70 ? "critical" : telemetry.networkHealth <= 90 ? "warning" : "nominal";
   const statuses = [
     {
       id: "water",
-      label: "Water trough",
+      label: "Water",
       value: `${Math.round(telemetry.waterPct)}% full`,
       detail: telemetry.pumpOn ? "Pump circulating" : "Pump idle until 60%",
       tone: telemetry.waterPct <= 30 ? "critical" : telemetry.waterPct <= 55 ? "warning" : "nominal",
@@ -77,17 +75,23 @@ export function Header({ telemetry, herd, user, onLogout }) {
     },
     {
       id: "fence",
-      label: "Perimeter fence",
+      label: "Fence",
       value: `${telemetry.fenceKv.toFixed(1)} kV at energizer`,
       detail: telemetry.fenceKv < 6.4 ? "Inspect fence voltage" : "Voltage within target window",
       tone: telemetry.fenceKv <= 6 ? "critical" : telemetry.fenceKv <= 6.8 ? "warning" : "nominal",
     },
     {
-      id: "stray",
-      label: "Stray monitor",
-      value: strayCount ? `${strayCount} animal${strayCount === 1 ? "" : "s"} outside grazing zone` : "All animals accounted for",
-      detail: strayCount ? "Tap a stray in the map list to dispatch" : "Virtual boundary holding",
-      tone: strayTone,
+      id: "network",
+      label: "Link",
+      value: `${telemetry.networkHealth}% uptime`,
+      detail:
+        telemetry.networkHealth >= 95
+          ? "Multi-path link healthy"
+          : telemetry.networkHealth >= 80
+            ? "Monitoring packet loss on ridge repeater"
+            : "Inspect gateway and antennas",
+      tone: networkTone,
+      icon: <SignalStrengthIcon strength={telemetry.networkHealth} tone={networkTone} />,
     },
   ];
 

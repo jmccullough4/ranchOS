@@ -11,6 +11,7 @@ const paddockSourceId = "paddocks";
 const ranchSourceId = "ranch-bounds";
 const selectedCowLayerId = "cow-selected";
 const activePastureLayerId = "paddock-active";
+const drawStylesheetId = "mapbox-draw-stylesheet";
 
 function createStyle() {
   if (!hasMapboxToken) {
@@ -108,6 +109,8 @@ export function PastureMap({
   const [groupSelectionIds, setGroupSelectionIds] = useState([]);
   const [activePastureId, setActivePastureId] = useState(null);
   const [pastureNameDraft, setPastureNameDraft] = useState("");
+  const [drawReadyInternal, setDrawReadyInternal] = useState(false);
+  const [activeDrawMode, setActiveDrawMode] = useState("simple_select");
 
   useEffect(() => {
     cowsRef.current = cows;
@@ -157,29 +160,6 @@ export function PastureMap({
     };
   }, [groupSelection]);
 
-  const straySummary = useMemo(() => {
-    const strays = cows.filter((cow) => cow.isStray);
-    if (strays.length === 0) return null;
-    const centroid = strays.reduce(
-      (accumulator, cow) => {
-        accumulator.lon += cow.lon;
-        accumulator.lat += cow.lat;
-        return accumulator;
-      },
-      { lon: 0, lat: 0 },
-    );
-    centroid.lon /= strays.length;
-    centroid.lat /= strays.length;
-    const horizontal = centroid.lon > ranchCenter.lon ? "eastern" : "western";
-    const vertical = centroid.lat > ranchCenter.lat ? "north" : "south";
-    return {
-      count: strays.length,
-      centroid,
-      descriptor: `${vertical}-${horizontal}`,
-      distance: strays.reduce((max, cow) => Math.max(max, cow.distanceFromCenter), 0),
-    };
-  }, [cows]);
-
   useEffect(() => {
     optionsRef.current = options;
   }, [options]);
@@ -205,8 +185,19 @@ export function PastureMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    const ensureDrawStyles = () => {
+      if (typeof document === "undefined") return;
+      if (document.getElementById(drawStylesheetId)) return;
+      const link = document.createElement("link");
+      link.id = drawStylesheetId;
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.0/dist/mapbox-gl-draw.css";
+      document.head.appendChild(link);
+    };
+
     const loadDraw = () => {
       if (typeof window === "undefined") return Promise.resolve(null);
+      ensureDrawStyles();
       if (window.MapboxDraw) return Promise.resolve(window.MapboxDraw);
       if (window.__ranchosDrawPromise) return window.__ranchosDrawPromise;
       window.__ranchosDrawPromise = new Promise((resolve, reject) => {
@@ -241,9 +232,15 @@ export function PastureMap({
           draw = new DrawCtor({ displayControlsDefault: false, controls: { polygon: true, trash: true } });
           map.addControl(draw, "top-left");
           drawRef.current = draw;
+          setDrawReadyInternal(true);
+          setActiveDrawMode(draw?.getMode ? draw.getMode() : "simple_select");
+          draw?.on("draw.modechange", (event) => {
+            setActiveDrawMode(event.mode);
+          });
           onDrawReadyRef.current?.(true);
         } else {
           onDrawReadyRef.current?.(false);
+          setDrawReadyInternal(false);
         }
 
         const handleDrawChange = () => {
@@ -456,6 +453,8 @@ export function PastureMap({
     return () => {
       cancelled = true;
       drawRef.current = null;
+      setDrawReadyInternal(false);
+      setActiveDrawMode("simple_select");
       onDrawReadyRef.current?.(false);
       if (mapRef.current) {
         mapRef.current.remove();
@@ -613,22 +612,55 @@ export function PastureMap({
     onSelectCowRef.current?.(null);
   };
 
-  const handleFocusStrays = () => {
-    const map = mapRef.current;
-    if (!map || !straySummary) return;
-    const strays = cows.filter((cow) => cow.isStray);
-    if (!strays.length) return;
-    const minLon = Math.min(...strays.map((cow) => cow.lon));
-    const maxLon = Math.max(...strays.map((cow) => cow.lon));
-    const minLat = Math.min(...strays.map((cow) => cow.lat));
-    const maxLat = Math.max(...strays.map((cow) => cow.lat));
-    map.fitBounds(
-      [
-        [minLon, minLat],
-        [maxLon, maxLat],
-      ],
-      { padding: 120, maxZoom: 18, duration: 800 },
+  const handleStartDraw = () => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    draw.changeMode("draw_polygon");
+    setActiveDrawMode("draw_polygon");
+  };
+
+  const handleFinishDraw = () => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    draw.changeMode("simple_select");
+    setActiveDrawMode("simple_select");
+  };
+
+  const handleDeleteSelection = () => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    draw.trash();
+  };
+
+  const handleRenamePasture = (event) => {
+    if (event) event.preventDefault();
+    if (!activePastureId) return;
+    const nextName = pastureNameDraft.trim();
+    if (!nextName) return;
+    const updated = pastures.map((feature) =>
+      feature.id === activePastureId
+        ? {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              name: nextName,
+              __id: feature.properties?.__id ?? feature.id,
+            },
+          }
+        : feature,
     );
+    onPasturesChangeRef.current?.(updated);
+  };
+
+  const handleDeletePasture = () => {
+    if (!activePastureId) return;
+    const filtered = pastures.filter((feature) => feature.id !== activePastureId);
+    setActivePastureId(null);
+    onPasturesChangeRef.current?.(filtered);
+  };
+
+  const handleClosePasture = () => {
+    setActivePastureId(null);
   };
 
   const handleRenamePasture = (event) => {
@@ -766,6 +798,39 @@ export function PastureMap({
           </div>
         </div>
       )}
+      {drawReadyInternal && (
+        <div className="pointer-events-none absolute right-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-col gap-2">
+          <div className="pointer-events-auto rounded-2xl border border-neutral-800/70 bg-neutral-950/90 p-3 text-[11px] text-neutral-200 backdrop-blur">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleStartDraw}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 font-semibold uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/20"
+              >
+                Draw pasture
+              </button>
+              <button
+                type="button"
+                onClick={handleFinishDraw}
+                disabled={activeDrawMode !== "draw_polygon"}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1 font-semibold uppercase tracking-wide text-neutral-200 hover:border-emerald-500/50 disabled:opacity-50"
+              >
+                Finish shape
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelection}
+                className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1 font-semibold uppercase tracking-wide text-rose-100 hover:bg-rose-500/20"
+              >
+                Delete selection
+              </button>
+            </div>
+            <div className="mt-2 text-[10px] text-neutral-500">
+              Use draw to sketch grazing cells, finish to return to select mode, and delete to remove highlighted shapes.
+            </div>
+          </div>
+        </div>
+      )}
       <div ref={mapContainerRef} className="h-full w-full" />
       {activePasture && (
         <div className="pointer-events-none absolute left-3 bottom-3 z-20 w-72 max-w-[calc(100%-1.5rem)]">
@@ -820,30 +885,6 @@ export function PastureMap({
               Click a pasture to edit its shape, rename it, or delete it. Use the draw tools to add another grazing cell.
             </div>
           </form>
-        </div>
-      )}
-      {straySummary && (
-        <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-xs flex-col gap-2">
-          <div className="pointer-events-auto rounded-2xl border border-amber-500/40 bg-neutral-950/95 p-3 text-xs text-amber-100 shadow-lg backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.3em] text-amber-300">AI herd monitor</div>
-                <div className="mt-1 text-sm font-semibold text-amber-100">{straySummary.count} straggler{straySummary.count === 1 ? "" : "s"}</div>
-                <div className="text-[11px] text-amber-200">Cluster {straySummary.descriptor.replace("-", " ")} paddock</div>
-                <div className="mt-1 text-[11px] text-amber-200/80">Max hub distance {Math.round(straySummary.distance)} m</div>
-              </div>
-              <button
-                type="button"
-                onClick={handleFocusStrays}
-                className="rounded-lg border border-amber-400/60 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/20"
-              >
-                Locate
-              </button>
-            </div>
-            <div className="mt-2 text-[11px] text-amber-100/80">
-              Stragglers detected beyond the main herd cluster. Shift-drag to box select and inspect.
-            </div>
-          </div>
         </div>
       )}
       {groupStats && (

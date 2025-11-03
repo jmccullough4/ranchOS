@@ -9,6 +9,31 @@ export const ranchBounds = {
 
 export const defaultRanchAddress = "7715 231st St E, Myakka City, FL";
 
+export const defaultRanchBoundary = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: {
+        name: "3 Strands Cattle Co.",
+        description: "Saved ranch parcel boundary",
+      },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [ranchBounds.minLon + 0.0003, ranchBounds.maxLat - 0.0004],
+            [ranchBounds.maxLon - 0.0006, ranchBounds.maxLat - 0.0006],
+            [ranchBounds.maxLon - 0.0004, ranchBounds.minLat + 0.0008],
+            [ranchBounds.minLon + 0.0005, ranchBounds.minLat + 0.0004],
+            [ranchBounds.minLon + 0.0003, ranchBounds.maxLat - 0.0004],
+          ],
+        ],
+      },
+    },
+  ],
+};
+
 export const paddocks = [
   {
     name: "North Paddock",

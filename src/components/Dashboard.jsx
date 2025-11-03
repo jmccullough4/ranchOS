@@ -1,19 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { hasMapboxToken } from "../constants/map.js";
-import { defaultRanchAddress, paddocks as defaultPaddocks, ranchBounds } from "../constants/ranch.js";
+import { defaultRanchAddress, defaultRanchBoundary, paddocks as defaultPaddocks } from "../constants/ranch.js";
 import { PastureMap } from "./PastureMap.jsx";
-import { SensorNotifications } from "./SensorNotifications.jsx";
 import { polygonAreaInAcres } from "../utils/geo.js";
 import { formatNow, formatRelativeFromNow } from "../utils/time.js";
 import { randomInt } from "../utils/math.js";
 import { Field } from "./Field.jsx";
 import { CameraFeed } from "./CameraFeed.jsx";
 
-const cameraHubLink = {
-  label: "Open security camera wall",
-  href: "/cam1.mp4",
-};
+const cameraFeeds = [
+  { id: "cam1", label: "Barn alley", src: "/cam1.mp4" },
+  { id: "cam2", label: "Chute staging", src: "/cam2.mp4" },
+  { id: "cam3", label: "East gate", src: "/cam3.mp4" },
+  { id: "cam4", label: "Creek crossing", src: "/cam4.mp4" },
+];
+
+const hubTreatments = [
+  { name: "Bovishield Gold 5", withdrawal: "21 days" },
+  { name: "Vision 7 Somnus", withdrawal: "18 days" },
+  { name: "One Shot Ultra 7", withdrawal: "10 days" },
+  { name: "Ultrabac 7/Somubac", withdrawal: "14 days" },
+  { name: "Cattlemaster Gold FP5", withdrawal: "28 days" },
+];
 
 function paddocksToFeatures(paddocks) {
   return paddocks.map((paddock, index) => {
@@ -41,37 +50,15 @@ export function Dashboard({
   onSendReport,
   rows,
   onAddRow,
-  onPrintReceipt,
 }) {
   const mapSectionRef = useRef(null);
-  const [address, setAddress] = useState(defaultRanchAddress);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
-  const [boundary, setBoundary] = useState(() => ({
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: { name: "Ranch boundary" },
-        geometry: {
-          type: "Polygon",
-          coordinates: [
-            [
-              [ranchBounds.minLon, ranchBounds.minLat],
-              [ranchBounds.maxLon, ranchBounds.minLat],
-              [ranchBounds.maxLon, ranchBounds.maxLat],
-              [ranchBounds.minLon, ranchBounds.maxLat],
-              [ranchBounds.minLon, ranchBounds.minLat],
-            ],
-          ],
-        },
-      },
-    ],
-  }));
+  const address = defaultRanchAddress;
+  const [boundary, setBoundary] = useState(defaultRanchBoundary);
   const [pastures, setPastures] = useState(() => paddocksToFeatures(defaultPaddocks));
   const [selectedCowId, setSelectedCowId] = useState(null);
   const [drawReady, setDrawReady] = useState(false);
   const [reportChannels, setReportChannels] = useState({ sms: true, backhaul: true });
+  const [cameraWallOpen, setCameraWallOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedCowId) return;
@@ -93,14 +80,6 @@ export function Dashboard({
     [pastures],
   );
 
-  const strayCows = useMemo(() => {
-    const list = herd.cows.filter((cow) => cow.isStray);
-    return list
-      .slice()
-      .sort((a, b) => a.distanceToFence - b.distanceToFence)
-      .slice(0, 6);
-  }, [herd.cows]);
-
   const lastRefreshTs = herd.cows.reduce((max, cow) => Math.max(max, cow.lastSeenTs ?? 0), 0);
   const lastRefreshed = lastRefreshTs ? formatRelativeFromNow(lastRefreshTs) : "moments ago";
 
@@ -108,50 +87,22 @@ export function Dashboard({
     mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const focusMapWithCow = (cowId) => {
-    if (cowId) {
-      setSelectedCowId(cowId);
-    }
-    scrollMapIntoView();
-  };
-
-  const handleLocate = async (event) => {
-    event.preventDefault();
-    if (!address.trim()) return;
-    setIsSearching(true);
-    setSearchError("");
-    try {
-      const query = encodeURIComponent(address.trim());
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=geojson&polygon_geojson=1&q=${query}`, {
-        headers: { Accept: "application/geo+json,application/json" },
-      });
-      if (!response.ok) throw new Error("Address lookup failed");
-      const geojson = await response.json();
-      const feature = geojson.features?.find((item) => item.geometry?.type?.includes("Polygon"));
-      if (!feature) {
-        setSearchError("No parcel boundary found for that address. Try refining the search.");
-        return;
-      }
-      setBoundary({ type: "FeatureCollection", features: [feature] });
-      onNotify?.(`Loaded ranch boundary for ${feature.properties?.display_name ?? "address"}`);
-      scrollMapIntoView();
-    } catch (error) {
-      setSearchError(error.message);
-      onNotify?.("Unable to fetch parcel boundary. Please try again.");
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
   const handleRemovePasture = (id) => {
     setPastures((previous) => previous.filter((feature) => feature.id !== id));
     onNotify?.("Removed pasture boundary.");
   };
 
-  const handleViewStrays = () => {
-    const primary = strayCows[0] ?? herd.cows.find((cow) => cow.isStray);
+  const handleRecenterBoundary = () => {
+    setBoundary(defaultRanchBoundary);
+    onNotify?.("Ranch boundary restored from hub record.");
+    scrollMapIntoView();
+  };
+
+  const handleFocusStrays = () => {
+    const primary = herd.cows.find((cow) => cow.isStray);
     if (primary) {
       setSelectedCowId(primary.id);
+      onNotify?.(`Focusing on ${primary.tag} near the fence.`);
     }
     scrollMapIntoView();
   };
@@ -173,22 +124,31 @@ export function Dashboard({
   const shrinkPct = latestScan ? ((parseInt(latestScan.eid.slice(-2), 10) % 4) + 1) : null;
   const chuteTemp = latestScan ? 99 + (parseInt(latestScan.eid.slice(-3), 10) % 3) : null;
 
-  const handleSimulateScan = () => {
-    const sample = {
+  const createHubScan = useCallback(() => {
+    const treatment = hubTreatments[randomInt(0, hubTreatments.length - 1)];
+    return {
       time: formatNow(),
       eid: `84000312${randomInt(345670, 999999)}`,
       weight: randomInt(920, 1280),
-      treatment: "Resp Shot A",
-      withdrawal: "7 days",
+      treatment: treatment.name,
+      withdrawal: treatment.withdrawal,
     };
+  }, []);
+
+  const handleSimulateScan = () => {
+    const sample = createHubScan();
     onAddRow?.(sample);
-    onNotify?.(`Chute scan logged for ${sample.eid}`);
+    onNotify?.(`Hub sync logged ${sample.eid} (${sample.treatment})`);
   };
 
-  const handlePrintLatest = () => {
-    if (!latestScan) return;
-    onPrintReceipt?.(latestScan);
-  };
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const sample = createHubScan();
+      onAddRow?.(sample);
+      onNotify?.(`Hub sync logged ${sample.eid} (${sample.treatment})`);
+    }, 45000);
+    return () => clearInterval(interval);
+  }, [createHubScan, onAddRow, onNotify]);
 
   return (
     <motion.section key="dashboard" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
@@ -208,7 +168,7 @@ export function Dashboard({
                 <span>Tracking {herd.cows.length} head</span>
                 <button
                   type="button"
-                  onClick={handleViewStrays}
+                  onClick={handleFocusStrays}
                   className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/20"
                 >
                   Focus stray cluster
@@ -217,31 +177,23 @@ export function Dashboard({
             </header>
 
             <div className="flex flex-col gap-5 p-5">
-              <form
-                onSubmit={handleLocate}
-                className="flex flex-col gap-3 rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-sm sm:flex-row sm:items-end"
-              >
-                <label className="flex-1 text-xs uppercase tracking-wide text-neutral-400">
-                  Ranch address
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(event) => setAddress(event.target.value)}
-                    placeholder="123 County Rd, Myakka City"
-                    className="mt-1 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-emerald-500 focus:outline-none"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  disabled={isSearching}
-                  className="rounded-lg border border-emerald-500/40 bg-emerald-600/20 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-600/30 disabled:opacity-50"
-                >
-                  {isSearching ? "Fetching…" : "Load boundary"}
-                </button>
-              </form>
-              {searchError && (
-                <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">{searchError}</div>
-              )}
+              <div className="flex flex-col gap-3 rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Ranch address</div>
+                  <div className="mt-1 text-sm font-medium text-neutral-200">{address}</div>
+                  <div className="text-[11px] text-neutral-500">Auto-filled from saved hub parcel.</div>
+                </div>
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <button
+                    type="button"
+                    onClick={handleRecenterBoundary}
+                    className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/20"
+                  >
+                    Recenter map
+                  </button>
+                  <span className="text-[10px] text-neutral-500">Parcel boundary synced nightly.</span>
+                </div>
+              </div>
 
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
                 <div className="space-y-4">
@@ -354,41 +306,6 @@ export function Dashboard({
           </section>
 
           <aside className="flex flex-col gap-4">
-            {strayCows.length > 0 ? (
-              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-100">
-                <div className="flex items-center gap-2">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide text-amber-300">Stray watch</div>
-                    <div className="text-xs text-amber-200">{strayCows.length} animal{strayCows.length === 1 ? "" : "s"} flagged</div>
-                  </div>
-                </div>
-                <ul className="mt-2 flex flex-col gap-2">
-                  {strayCows.map((cow) => (
-                    <li key={cow.id}>
-                      <button
-                        type="button"
-                        onClick={() => focusMapWithCow(cow.id)}
-                        className="flex w-full flex-col gap-1 rounded-xl border border-amber-500/30 bg-neutral-900/80 px-3 py-2 text-left text-[11px] text-amber-100 hover:border-amber-400"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-amber-200">{cow.tag}</span>
-                          <span className="text-[10px] text-amber-300">{formatRelativeFromNow(cow.lastSeenTs)}</span>
-                        </div>
-                        <div className="text-[10px] text-amber-200">
-                          {cow.id} · Fence {Math.max(0, Math.round(cow.distanceToFence))} m · Hub {Math.round(cow.distanceFromCenter)} m
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-200">
-                <div className="text-[10px] uppercase tracking-wide text-emerald-300">Stray watch</div>
-                <div className="mt-1 text-xs">All animals within safe radius.</div>
-              </div>
-            )}
-
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4 text-sm text-neutral-300">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -421,42 +338,31 @@ export function Dashboard({
             <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-300">
               <div className="text-[11px] uppercase tracking-wide text-neutral-500">Security cameras</div>
               <p className="mt-1 text-xs text-neutral-400">
-                Live edge recording is available from the barn, east gate, and creek monitors.
+                Live edge recording from barn, chute staging, east gate, and creek crossings with threat analytics overlays.
               </p>
-              <a
-                href={cameraHubLink.href}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 block overflow-hidden rounded-2xl border border-sky-400/40 bg-neutral-950 transition hover:border-sky-300/70 hover:shadow-[0_0_25px_rgba(56,189,248,0.35)]"
-              >
-                <div className="relative">
-                  <CameraFeed src="/cam2.mp4" label="Barn" />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/10 to-transparent" />
-                  <div className="absolute bottom-3 left-3 flex flex-col gap-1 rounded-xl border border-sky-400/40 bg-sky-500/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-sky-100 backdrop-blur">
-                    <span>Launch camera wall</span>
-                    <span className="text-[10px] font-normal text-sky-200/80">Threat detection active</span>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {cameraFeeds.map((feed) => (
+                  <div key={feed.id} className="overflow-hidden rounded-2xl border border-sky-400/30 bg-neutral-950/80">
+                    <CameraFeed src={feed.src} label={feed.label} />
                   </div>
-                </div>
-              </a>
-              <a
-                href={cameraHubLink.href}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-200 hover:text-sky-100"
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraWallOpen(true)}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-sky-400/50 bg-sky-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-sky-100 hover:bg-sky-500/20"
               >
-                ↗ {cameraHubLink.label}
-              </a>
+                ↗ Launch camera wall
+              </button>
+              <div className="mt-2 text-[10px] text-sky-200/80">Threat detection flags motion across all feeds.</div>
             </div>
           </aside>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-          <SensorNotifications telemetry={telemetry} />
-
-          <section className="rounded-3xl border border-neutral-800 bg-neutral-950/90 p-6 shadow-2xl shadow-emerald-500/5">
+        <section className="rounded-3xl border border-neutral-800 bg-neutral-950/90 p-6 shadow-2xl shadow-emerald-500/5">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 pb-4">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.35em] text-neutral-500">Chute-side sync</div>
+                <div className="text-[11px] uppercase tracking-[0.35em] text-neutral-500">Hub sync</div>
                 <h2 className="text-xl font-semibold text-neutral-50">Processing lane overview</h2>
               </div>
               <div className="rounded-xl border border-neutral-800 bg-neutral-900/80 px-3 py-2 text-[11px] text-neutral-400">
@@ -533,22 +439,14 @@ export function Dashboard({
                   <button
                     type="button"
                     onClick={handleSimulateScan}
-                    className="rounded-xl border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm hover:bg-neutral-700"
+                    className="rounded-xl border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
                   >
-                    + Log chute scan
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePrintLatest}
-                    className="rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm hover:bg-neutral-800"
-                  >
-                    🧾 Print latest receipt
+                    Sync hub now
                   </button>
                 </div>
               </div>
             </div>
-          </section>
-        </div>
+        </section>
 
         {!hasMapboxToken && (
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-[11px] text-neutral-400">
@@ -556,6 +454,32 @@ export function Dashboard({
           </div>
         )}
       </div>
+      {cameraWallOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-3xl border border-neutral-800 bg-neutral-950/95 p-6 shadow-[0_0_40px_rgba(14,165,233,0.2)] backdrop-blur">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.35em] text-sky-300">Security hub</div>
+                <h3 className="text-xl font-semibold text-neutral-50">Threat detection camera wall</h3>
+                <p className="mt-1 text-sm text-neutral-400">Streaming four HD feeds with anomaly detection overlays.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraWallOpen(false)}
+                className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-300 hover:border-sky-400/60"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {cameraFeeds.map((feed) => (
+                <CameraFeed key={`${feed.id}-wall`} src={feed.src} label={feed.label} variant="expanded" />
+              ))}
+            </div>
+            <div className="mt-4 text-[11px] text-neutral-500">Smart alerts highlight motion zones in red whenever livestock or intruders enter high-risk areas.</div>
+          </div>
+        </div>
+      )}
     </motion.section>
   );
 }
