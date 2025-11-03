@@ -1,8 +1,24 @@
+@import "maplibre-gl/dist/maplibre-gl.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import 'maplibre-gl/dist/maplibre-gl.css';
+:root {
+  color-scheme: dark;
+}
 
-html, body, #root { height: 100%; }
-.maplibre-container { border-radius: 1rem; overflow: hidden; }
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0a0a0a;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.maplibre-container {
+  border-radius: 1rem;
+  overflow: hidden;
+}
