@@ -5,6 +5,7 @@ import { paddocks as defaultPaddocks, ranchBounds } from "../constants/ranch.js"
 import { CameraFeed } from "./CameraFeed.jsx";
 import { PastureMap } from "./PastureMap.jsx";
 import { TelemetryPanel } from "./TelemetryPanel.jsx";
+import { SensorNotifications } from "./SensorNotifications.jsx";
 import { polygonAreaInAcres } from "../utils/geo.js";
 import { formatRelativeFromNow } from "../utils/time.js";
 
@@ -166,6 +167,13 @@ export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNo
     />
   );
 
+  const focusMapWithCow = (cowId) => {
+    if (cowId) {
+      setSelectedCowId(cowId);
+    }
+    setExpandedPanel(panelIds.map);
+  };
+
   const renderMapPanel = (variant) => {
     const isExpanded = variant === "expanded";
     return (
@@ -221,7 +229,12 @@ export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNo
               selectedCowId={selectedCowId}
               selectedCow={selectedCow}
               onSelectCow={(cow) => {
-                setSelectedCowId(cow?.id ?? null);
+                if (cow) {
+                  setSelectedCowId(cow.id);
+                  setExpandedPanel(panelIds.map);
+                } else {
+                  setSelectedCowId(null);
+                }
               }}
               onDrawReady={setDrawReady}
               variant={variant}
@@ -294,7 +307,7 @@ export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNo
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSelectedCowId(strayCows[0].id)}
+                    onClick={() => focusMapWithCow(strayCows[0].id)}
                     className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/20"
                   >
                     Focus first
@@ -305,7 +318,7 @@ export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNo
                     <li key={cow.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedCowId(cow.id)}
+                        onClick={() => focusMapWithCow(cow.id)}
                         className="flex w-full flex-col gap-1 rounded-xl border border-amber-500/30 bg-neutral-900/80 px-3 py-2 text-left text-[11px] text-amber-100 hover:border-amber-400"
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -402,6 +415,14 @@ export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNo
 
   const expandedConfig = expandedPanel ? panelMeta[expandedPanel] : null;
 
+  const handleViewStrays = () => {
+    const primary = strayCows[0] ?? herd.cows.find((cow) => cow.isStray);
+    if (primary) {
+      setSelectedCowId(primary.id);
+    }
+    setExpandedPanel(panelIds.map);
+  };
+
   return (
     <>
       <motion.section
@@ -411,57 +432,60 @@ export function Dashboard({ telemetry, herd, sms, options, onOptionsChange, onNo
         exit={{ opacity: 0, y: -8 }}
         transition={{ duration: 0.25 }}
       >
-        <div className="grid gap-6 xl:auto-rows-[420px] xl:grid-cols-6">
-          <section className={getPanelClasses(panelIds.cameras)}>
-            <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-              <div>
-                <div className="font-medium">{panelMeta[panelIds.cameras].title}</div>
-                <div className="text-xs text-neutral-400">{panelMeta[panelIds.cameras].subtitle}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setExpandedPanel(panelIds.cameras)}
-                className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-1 text-xs text-neutral-300 hover:border-neutral-700"
-              >
-                View detail
-              </button>
-            </header>
-            <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.cameras)}</div>
-          </section>
+        <div className="space-y-6">
+          <SensorNotifications telemetry={telemetry} herd={herd} lastMessage={sms} onViewMap={handleViewStrays} />
+          <div className="grid gap-6 xl:auto-rows-[420px] xl:grid-cols-6">
+            <section className={getPanelClasses(panelIds.cameras)}>
+              <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+                <div>
+                  <div className="font-medium">{panelMeta[panelIds.cameras].title}</div>
+                  <div className="text-xs text-neutral-400">{panelMeta[panelIds.cameras].subtitle}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPanel(panelIds.cameras)}
+                  className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-1 text-xs text-neutral-300 hover:border-neutral-700"
+                >
+                  View detail
+                </button>
+              </header>
+              <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.cameras)}</div>
+            </section>
 
-          <section className={getPanelClasses(panelIds.telemetry)}>
-            <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-              <div>
-                <div className="font-medium">{panelMeta[panelIds.telemetry].title}</div>
-                <div className="text-xs text-neutral-400">{panelMeta[panelIds.telemetry].subtitle}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setExpandedPanel(panelIds.telemetry)}
-                className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-1 text-xs text-neutral-300 hover:border-neutral-700"
-              >
-                View detail
-              </button>
-            </header>
-            <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.telemetry)}</div>
-          </section>
+            <section className={getPanelClasses(panelIds.telemetry)}>
+              <header className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+                <div>
+                  <div className="font-medium">{panelMeta[panelIds.telemetry].title}</div>
+                  <div className="text-xs text-neutral-400">{panelMeta[panelIds.telemetry].subtitle}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPanel(panelIds.telemetry)}
+                  className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-1 text-xs text-neutral-300 hover:border-neutral-700"
+                >
+                  View detail
+                </button>
+              </header>
+              <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.telemetry)}</div>
+            </section>
 
-          <section className={getPanelClasses(panelIds.map)}>
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 px-4 py-3">
-              <div>
-                <div className="font-medium">{panelMeta[panelIds.map].title}</div>
-                <div className="text-xs text-neutral-400">{panelMeta[panelIds.map].subtitle}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setExpandedPanel(panelIds.map)}
-                className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-1 text-xs text-neutral-300 hover:border-neutral-700"
-              >
-                View detail
-              </button>
-            </header>
-            <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.map)}</div>
-          </section>
+            <section className={getPanelClasses(panelIds.map)}>
+              <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+                <div>
+                  <div className="font-medium">{panelMeta[panelIds.map].title}</div>
+                  <div className="text-xs text-neutral-400">{panelMeta[panelIds.map].subtitle}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPanel(panelIds.map)}
+                  className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-1 text-xs text-neutral-300 hover:border-neutral-700"
+                >
+                  View detail
+                </button>
+              </header>
+              <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.map)}</div>
+            </section>
+          </div>
         </div>
       </motion.section>
 
