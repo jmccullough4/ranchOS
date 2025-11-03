@@ -128,8 +128,8 @@ function createCow(index, totalCount) {
     lat,
     homeLon: lon,
     homeLat: lat,
-    vx: (Math.random() - 0.5) * 0.00008,
-    vy: (Math.random() - 0.5) * 0.00008,
+    vx: (Math.random() - 0.5) * 0.00002,
+    vy: (Math.random() - 0.5) * 0.00002,
     immunizations: buildImmunizationRecord(index),
     distanceFromCenter,
     distanceToFence,
@@ -147,16 +147,17 @@ export function useHerd(count = 50, tickMs = 1000) {
   useEffect(() => {
     setCows((list) =>
       list.map((cow) => {
-        const pullStrength = cow.isStraggler ? 0.16 : 0.1;
+        const pullStrength = cow.isStraggler ? 0.12 : 0.08;
+        const grazingJitter = cow.isStraggler ? 0.000012 : 0.000008;
         let vx = clamp(
-          cow.vx + (Math.random() - 0.5) * 0.000025 + (cow.homeLon - cow.lon) * pullStrength,
-          -0.00025,
-          0.00025,
+          cow.vx * 0.6 + (Math.random() - 0.5) * grazingJitter + (cow.homeLon - cow.lon) * pullStrength,
+          -0.00006,
+          0.00006,
         );
         let vy = clamp(
-          cow.vy + (Math.random() - 0.5) * 0.000025 + (cow.homeLat - cow.lat) * pullStrength,
-          -0.00025,
-          0.00025,
+          cow.vy * 0.6 + (Math.random() - 0.5) * grazingJitter + (cow.homeLat - cow.lat) * pullStrength,
+          -0.00006,
+          0.00006,
         );
         let lon = cow.lon + vx;
         let lat = cow.lat + vy;
@@ -169,12 +170,12 @@ export function useHerd(count = 50, tickMs = 1000) {
           vy = -vy;
           lat = clamp(lat, ranchBounds.minLat, ranchBounds.maxLat);
         }
-        if (Math.random() < 0.02) {
-          vx *= 0.5;
-          vy *= -0.5;
+        if (Math.random() < 0.05) {
+          vx *= 0.4;
+          vy *= 0.4;
         }
 
-        const weightShift = (Math.random() - 0.5) * 0.8;
+        const weightShift = (Math.random() - 0.5) * 0.3;
         const weight = Math.max(950, Math.round(cow.weight + weightShift));
         const distanceFromCenter = distanceInMeters({ lon, lat }, ranchCenter);
         const distanceToFence = distanceToFenceMeters({ lon, lat }, ranchBounds);

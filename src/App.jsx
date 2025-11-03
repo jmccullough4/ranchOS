@@ -19,7 +19,7 @@ export default function App() {
   const [user, setUser] = useState(null);
 
   const telemetry = useTelemetry(1000);
-  const herd = useHerd(50, 1000);
+  const herd = useHerd(50, 4000);
 
   useEffect(() => {
     if (!toastMessage) return;
