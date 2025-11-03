@@ -61,6 +61,19 @@ export function Header({ telemetry, herd, user, onLogout }) {
       tone: telemetry.waterPct <= 30 ? "critical" : telemetry.waterPct <= 55 ? "warning" : "nominal",
     },
     {
+      id: "network",
+      label: "Backhaul link",
+      value: `${telemetry.networkHealth}% uptime`,
+      detail:
+        telemetry.networkHealth >= 95
+          ? "Multi-path link healthy"
+          : telemetry.networkHealth >= 80
+            ? "Monitoring packet loss on ridge repeater"
+            : "Inspect gateway and antennas",
+      tone: networkTone,
+      icon: <SignalStrengthIcon strength={telemetry.networkHealth} tone={networkTone} />,
+    },
+    {
       id: "fence",
       label: "Fence",
       value: `${telemetry.fenceKv.toFixed(1)} kV at energizer`,
