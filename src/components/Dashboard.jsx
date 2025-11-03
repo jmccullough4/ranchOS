@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { hasMapboxToken } from "../constants/map.js";
-import { paddocks as defaultPaddocks, ranchBounds } from "../constants/ranch.js";
+import { defaultRanchAddress, paddocks as defaultPaddocks, ranchBounds } from "../constants/ranch.js";
 import { PastureMap } from "./PastureMap.jsx";
 import { SensorNotifications } from "./SensorNotifications.jsx";
 import { polygonAreaInAcres } from "../utils/geo.js";
 import { formatNow, formatRelativeFromNow } from "../utils/time.js";
 import { randomInt } from "../utils/math.js";
 import { Field } from "./Field.jsx";
-import { ChuteScanFeed } from "./ChuteScanFeed.jsx";
+import { CameraFeed } from "./CameraFeed.jsx";
 
 const cameraHubLink = {
   label: "Open security camera wall",
@@ -16,15 +16,19 @@ const cameraHubLink = {
 };
 
 function paddocksToFeatures(paddocks) {
-  return paddocks.map((paddock, index) => ({
-    type: "Feature",
-    id: paddock.id ?? `default-${index}`,
-    properties: {
-      name: paddock.name ?? `Pasture ${index + 1}`,
-      acres: polygonAreaInAcres(paddock.coords),
-    },
-    geometry: { type: "Polygon", coordinates: [paddock.coords] },
-  }));
+  return paddocks.map((paddock, index) => {
+    const id = paddock.id ?? `default-${index}`;
+    return {
+      type: "Feature",
+      id,
+      properties: {
+        name: paddock.name ?? `Pasture ${index + 1}`,
+        acres: polygonAreaInAcres(paddock.coords),
+        __id: id,
+      },
+      geometry: { type: "Polygon", coordinates: [paddock.coords] },
+    };
+  });
 }
 
 export function Dashboard({
@@ -40,7 +44,7 @@ export function Dashboard({
   onPrintReceipt,
 }) {
   const mapSectionRef = useRef(null);
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState(defaultRanchAddress);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [boundary, setBoundary] = useState(() => ({
@@ -252,10 +256,11 @@ export function Dashboard({
                         features.map((feature, index) => {
                           const coords = feature.geometry?.coordinates?.[0];
                           const acres = coords ? polygonAreaInAcres(coords) : undefined;
+                          const featureId = feature.id ?? `drawn-${index}`;
                           return {
                             ...feature,
-                            id: feature.id ?? `drawn-${index}`,
-                            properties: { ...feature.properties, acres },
+                            id: featureId,
+                            properties: { ...feature.properties, acres, __id: feature.properties?.__id ?? featureId },
                           };
                         }),
                       );
@@ -351,18 +356,11 @@ export function Dashboard({
           <aside className="flex flex-col gap-4">
             {strayCows.length > 0 ? (
               <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-100">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <div>
                     <div className="text-[10px] uppercase tracking-wide text-amber-300">Stray watch</div>
                     <div className="text-xs text-amber-200">{strayCows.length} animal{strayCows.length === 1 ? "" : "s"} flagged</div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => focusMapWithCow(strayCows[0].id)}
-                    className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-500/20"
-                  >
-                    Focus first
-                  </button>
                 </div>
                 <ul className="mt-2 flex flex-col gap-2">
                   {strayCows.map((cow) => (
@@ -388,35 +386,6 @@ export function Dashboard({
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-200">
                 <div className="text-[10px] uppercase tracking-wide text-emerald-300">Stray watch</div>
                 <div className="mt-1 text-xs">All animals within safe radius.</div>
-              </div>
-            )}
-
-            {selectedCow && (
-              <div className="rounded-2xl border border-emerald-600/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-                <div className="text-xs uppercase tracking-wide text-emerald-300">Focus animal</div>
-                <div className="mt-1 font-semibold text-emerald-100">{selectedCow.tag} · {selectedCow.id}</div>
-                <div className="mt-1 grid gap-1 text-xs md:grid-cols-2">
-                  <div>Weight: {selectedCow.weight} lb</div>
-                  <div>Body condition: {selectedCow.bodyCondition}</div>
-                  <div>Distance to hub: {Math.round(selectedCow.distanceFromCenter)} m</div>
-                  <div>Nearest fence: {Math.round(selectedCow.distanceToFence)} m</div>
-                  <div>Last check: {selectedCow.lastCheck}</div>
-                  <div>Notes: {selectedCow.notes}</div>
-                </div>
-                {selectedCow.immunizations?.length ? (
-                  <div className="mt-2 space-y-1 text-[11px]">
-                    <div className="text-[10px] uppercase tracking-wide text-emerald-300">Immunizations</div>
-                    {selectedCow.immunizations.map((record) => (
-                      <div key={record.id} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1">
-                        <div className="flex items-center justify-between gap-2 text-emerald-100">
-                          <span className="font-semibold">{record.label}</span>
-                          <span className="text-[10px] text-emerald-200">{record.date}</span>
-                        </div>
-                        <div className="text-[10px] text-emerald-200/80">{record.category} · {record.location} · {record.lot}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             )}
 
@@ -458,9 +427,24 @@ export function Dashboard({
                 href={cameraHubLink.href}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-sky-400/40 bg-sky-500/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-sky-200 hover:bg-sky-500/20"
+                className="mt-4 block overflow-hidden rounded-2xl border border-sky-400/40 bg-neutral-950 transition hover:border-sky-300/70 hover:shadow-[0_0_25px_rgba(56,189,248,0.35)]"
               >
-                {cameraHubLink.label}
+                <div className="relative">
+                  <CameraFeed src="/cam2.mp4" label="Barn" />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/10 to-transparent" />
+                  <div className="absolute bottom-3 left-3 flex flex-col gap-1 rounded-xl border border-sky-400/40 bg-sky-500/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-sky-100 backdrop-blur">
+                    <span>Launch camera wall</span>
+                    <span className="text-[10px] font-normal text-sky-200/80">Threat detection active</span>
+                  </div>
+                </div>
+              </a>
+              <a
+                href={cameraHubLink.href}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-200 hover:text-sky-100"
+              >
+                ↗ {cameraHubLink.label}
               </a>
             </div>
           </aside>
@@ -529,7 +513,6 @@ export function Dashboard({
               </div>
 
               <div className="space-y-3">
-                <ChuteScanFeed variant="compact" className="w-full" />
                 <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] uppercase tracking-wide text-neutral-500">Live vitals</span>

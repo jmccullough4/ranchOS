@@ -4,12 +4,42 @@ const sensorColors = {
   critical: "bg-rose-500",
 };
 
-function SensorStatus({ label, value, detail, tone }) {
+const signalToneClasses = {
+  nominal: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.45)]",
+  warning: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.45)]",
+  critical: "bg-rose-500 shadow-[0_0_6px_rgba(248,113,113,0.45)]",
+};
+
+function SignalStrengthIcon({ strength, tone = "nominal" }) {
+  const clamped = Math.max(0, Math.min(100, strength ?? 0));
+  const normalized = clamped / 100;
+  const activeClass = signalToneClasses[tone] ?? signalToneClasses.nominal;
+  const thresholds = [0.2, 0.45, 0.7, 0.9];
+  return (
+    <span className="ml-1 flex items-end gap-[3px]" aria-hidden>
+      {thresholds.map((threshold, index) => {
+        const isActive = normalized >= threshold - 0.05;
+        return (
+          <span
+            key={threshold}
+            className={`w-[3px] rounded-sm ${isActive ? activeClass : "bg-neutral-700/70"}`}
+            style={{ height: `${8 + index * 4}px` }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+function SensorStatus({ label, value, detail, tone, icon = null }) {
   const dotClass = sensorColors[tone] ?? sensorColors.nominal;
   return (
     <div className="group relative flex items-center gap-2">
       <span className={`h-2.5 w-2.5 rounded-full ${dotClass} shadow-[0_0_10px_var(--tw-shadow-color)]`} style={{ "--tw-shadow-color": tone === "critical" ? "rgba(248,113,113,0.5)" : tone === "warning" ? "rgba(251,191,36,0.45)" : "rgba(74,222,128,0.45)" }} />
-      <span className="text-xs uppercase tracking-wide text-neutral-400">{label}</span>
+      <span className="flex items-center text-xs uppercase tracking-wide text-neutral-400">
+        {label}
+        {icon}
+      </span>
       <div className="pointer-events-none absolute left-0 top-full z-20 mt-3 hidden w-64 rounded-2xl border border-neutral-800 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-xl backdrop-blur group-hover:block">
         <div className="text-sm font-semibold text-neutral-100">{value}</div>
         {detail && <div className="mt-1 text-[11px] text-neutral-400">{detail}</div>}
@@ -22,6 +52,8 @@ export function Header({ telemetry, herd, user, onLogout }) {
   const displayName = user?.name ?? user?.username ?? "";
   const strayCount = herd.cows.filter((cow) => cow.isStray).length;
   const strayTone = strayCount > 4 ? "critical" : strayCount > 0 ? "warning" : "nominal";
+  const networkTone =
+    telemetry.networkHealth <= 70 ? "critical" : telemetry.networkHealth <= 90 ? "warning" : "nominal";
   const statuses = [
     {
       id: "water",
@@ -29,6 +61,19 @@ export function Header({ telemetry, herd, user, onLogout }) {
       value: `${Math.round(telemetry.waterPct)}% full`,
       detail: telemetry.pumpOn ? "Pump circulating" : "Pump idle until 60%",
       tone: telemetry.waterPct <= 30 ? "critical" : telemetry.waterPct <= 55 ? "warning" : "nominal",
+    },
+    {
+      id: "network",
+      label: "Backhaul link",
+      value: `${telemetry.networkHealth}% uptime`,
+      detail:
+        telemetry.networkHealth >= 95
+          ? "Multi-path link healthy"
+          : telemetry.networkHealth >= 80
+            ? "Monitoring packet loss on ridge repeater"
+            : "Inspect gateway and antennas",
+      tone: networkTone,
+      icon: <SignalStrengthIcon strength={telemetry.networkHealth} tone={networkTone} />,
     },
     {
       id: "fence",

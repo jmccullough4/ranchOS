@@ -7,6 +7,8 @@ export const ranchBounds = {
   maxLat: ranchCenter.lat + 0.0045,
 };
 
+export const defaultRanchAddress = "7715 231st St E, Myakka City, FL";
+
 export const paddocks = [
   {
     name: "North Paddock",
