@@ -35,8 +35,8 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
           <div className="font-medium">Chute-Side — Session #A24</div>
           <div className="text-xs text-neutral-400">Bluetooth EID reader · Scale</div>
         </div>
-        <div className="space-y-3 p-4">
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_minmax(0,1fr)]">
+        <div className="space-y-4 p-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="EID" value={latest?.eid || "84000…"} />
@@ -49,7 +49,7 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
                 <Field label="Disposition" value={latest ? "Calm" : "—"} />
               </div>
             </div>
-            <div className="relative flex min-h-[220px] items-stretch justify-center overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-transparent to-sky-500/20">
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-transparent to-sky-500/20 shadow-[0_0_35px_rgba(16,185,129,0.18)]">
               <video
                 src="/chute-scan.mp4"
                 className="h-full w-full object-cover opacity-70 mix-blend-screen"
@@ -59,9 +59,13 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
                 playsInline
               />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#2dd4bf22,transparent_60%)]" />
-              <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-black/60 to-transparent px-3 py-2 text-[11px] uppercase tracking-wide text-emerald-200">
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent px-3 py-2 text-[11px] uppercase tracking-wide text-emerald-200">
                 <span>Chute 3 · Depth vision</span>
                 <span>LIVE</span>
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-between px-4 pb-3 text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
+                <span>Frame sync 4D</span>
+                <span>Scan mesh</span>
               </div>
               <div className="scan-visor pointer-events-none absolute inset-0" />
             </div>

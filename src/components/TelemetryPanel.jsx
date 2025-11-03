@@ -61,6 +61,8 @@ export function TelemetryPanel({ telemetry, sms, selectedCow, variant = "compact
               <div>Weight: {selectedCow.weight} lb</div>
               <div>Body condition: {selectedCow.bodyCondition}</div>
               <div>Last treatment: {selectedCow.lastTreatment}</div>
+              <div className="md:col-span-2">Last check: {selectedCow.lastCheck}</div>
+              <div className="md:col-span-2">Notes: {selectedCow.notes}</div>
             </div>
           </div>
         )}

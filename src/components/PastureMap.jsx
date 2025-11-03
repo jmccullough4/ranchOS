@@ -87,6 +87,7 @@ function buildCowPopup(cow) {
       <div class="text-[11px] uppercase tracking-wide text-emerald-300">${cow.tag} · ${cow.id}</div>
       <div class="mt-1">Weight: <strong>${cow.weight} lb</strong></div>
       <div class="mt-1">Body condition: <strong>${cow.bodyCondition}</strong></div>
+      <div class="mt-1">Last treatment: ${cow.lastTreatment}</div>
       <div class="mt-1">Last check: ${cow.lastCheck}</div>
       <div class="mt-1">Notes: ${cow.notes}</div>
     </div>
@@ -101,6 +102,7 @@ export function PastureMap({
   pastures,
   onPasturesChange,
   selectedCowId,
+  selectedCow,
   onSelectCow,
   onDrawReady,
   variant = "compact",
@@ -127,6 +129,8 @@ export function PastureMap({
   useEffect(() => {
     onSelectCowRef.current = onSelectCow;
   }, [onSelectCow]);
+
+  const overlayCow = selectedCow ?? cows.find((item) => item.id === selectedCowId) ?? null;
 
   useEffect(() => {
     optionsRef.current = options;
@@ -424,25 +428,72 @@ export function PastureMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!selectedCowId) {
+    const activeCow = selectedCow ?? cows.find((item) => item.id === selectedCowId);
+    if (map.getLayer(selectedCowLayerId)) {
+      map.setFilter(selectedCowLayerId, ["==", ["get", "id"], activeCow?.id ?? ""]);
+    }
+    if (!activeCow) {
       popupRef.current?.remove();
       popupRef.current = null;
+      return;
     }
-    if (map.getLayer(selectedCowLayerId)) {
-      map.setFilter(selectedCowLayerId, ["==", ["get", "id"], selectedCowId ?? ""]);
-    }
-    if (!selectedCowId) return;
-    const cow = cows.find((item) => item.id === selectedCowId);
-    if (!cow) return;
     const popup = popupRef.current ?? new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 12 });
     popupRef.current = popup;
-    popup.setLngLat([cow.lon, cow.lat]).setHTML(buildCowPopup(cow)).addTo(map);
-  }, [selectedCowId, cows]);
+    popup.setLngLat([activeCow.lon, activeCow.lat]).setHTML(buildCowPopup(activeCow)).addTo(map);
+  }, [selectedCow, selectedCowId, cows]);
+
+  const handleClearSelection = () => {
+    popupRef.current?.remove();
+    popupRef.current = null;
+    onSelectCowRef.current?.(null);
+  };
 
   const heightClass = variant === "expanded" ? "h-[420px] sm:h-[520px] lg:h-[600px]" : "h-[320px] sm:h-[340px]";
 
   return (
     <div className={`relative ${heightClass} overflow-hidden rounded-2xl`}>
+      {overlayCow && (
+        <div className="pointer-events-none absolute left-3 top-3 z-20 w-64 max-w-[calc(100%-1.5rem)]">
+          <div className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-emerald-300">Focus animal</div>
+                <div className="mt-1 text-sm font-semibold text-neutral-50">{overlayCow.tag}</div>
+                <div className="text-[11px] text-neutral-400">{overlayCow.id}</div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] uppercase tracking-wide text-neutral-300 hover:border-neutral-500"
+              >
+                Clear
+              </button>
+            </div>
+            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Weight</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.weight} lb</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Condition</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.bodyCondition}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Last treatment</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.lastTreatment}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Last check</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.lastCheck}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Notes</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.notes}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
       <div ref={mapContainerRef} className="h-full w-full" />
       {!hasMapboxToken && (
         <div className="pointer-events-none absolute inset-0 flex items-start justify-end p-3">

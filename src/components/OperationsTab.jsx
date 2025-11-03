@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { hasMapboxToken } from "../constants/map.js";
 import { paddocks as defaultPaddocks, ranchBounds } from "../constants/ranch.js";
 import { CameraFeed } from "./CameraFeed.jsx";
-import { ChuteScanFeed } from "./ChuteScanFeed.jsx";
 import { PastureMap } from "./PastureMap.jsx";
 import { TelemetryPanel } from "./TelemetryPanel.jsx";
 import { polygonAreaInAcres } from "../utils/geo.js";
@@ -133,9 +132,10 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
 
   const renderCameraPanel = (variant) => {
     const isExpanded = variant === "expanded";
+    const spacing = isExpanded ? "gap-4 p-4" : "gap-2 p-3";
+    const columns = isExpanded ? "sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2";
     return (
-      <div className={`grid ${isExpanded ? "gap-4 p-4" : "gap-2 p-3"} ${isExpanded ? "md:grid-cols-2" : "grid-cols-2"}`}>
-        <ChuteScanFeed variant={variant} />
+      <div className={`grid ${spacing} ${columns}`}>
         {cameraFeeds.map((camera) => (
           <CameraFeed key={camera.label} label={camera.label} src={camera.src} variant={variant} />
         ))}
@@ -202,6 +202,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 );
               }}
               selectedCowId={selectedCowId}
+              selectedCow={selectedCow}
               onSelectCow={(cow) => {
                 setSelectedCowId(cow?.id ?? null);
               }}
