@@ -1,5 +1,5 @@
 const tabs = [
-  { id: "ops", label: "Operations" },
+  { id: "dashboard", label: "Notification dashboard" },
   { id: "eid", label: "Chute-Side EID Lite" },
 ];
 
