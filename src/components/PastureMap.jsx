@@ -663,6 +663,37 @@ export function PastureMap({
     setActivePastureId(null);
   };
 
+  const handleRenamePasture = (event) => {
+    if (event) event.preventDefault();
+    if (!activePastureId) return;
+    const nextName = pastureNameDraft.trim();
+    if (!nextName) return;
+    const updated = pastures.map((feature) =>
+      feature.id === activePastureId
+        ? {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              name: nextName,
+              __id: feature.properties?.__id ?? feature.id,
+            },
+          }
+        : feature,
+    );
+    onPasturesChangeRef.current?.(updated);
+  };
+
+  const handleDeletePasture = () => {
+    if (!activePastureId) return;
+    const filtered = pastures.filter((feature) => feature.id !== activePastureId);
+    setActivePastureId(null);
+    onPasturesChangeRef.current?.(filtered);
+  };
+
+  const handleClosePasture = () => {
+    setActivePastureId(null);
+  };
+
   return (
     <div className={`relative ${heightClass} overflow-hidden rounded-2xl`}>
       {overlayCow && (
