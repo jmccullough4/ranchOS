@@ -8,10 +8,10 @@ import { LoginScreen } from "./components/LoginScreen.jsx";
 import { EidTab } from "./components/EidTab.jsx";
 import { Footer } from "./components/Footer.jsx";
 import { Header } from "./components/Header.jsx";
-import { OperationsTab } from "./components/OperationsTab.jsx";
+import { Dashboard } from "./components/Dashboard.jsx";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("ops");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [toastMessage, setToastMessage] = useState("");
   const [rows, setRows] = useState([]);
   const [options, setOptions] = useState({ basemap: "satellite", breadcrumbs: true, heatmap: true });
@@ -19,7 +19,7 @@ export default function App() {
   const [user, setUser] = useState(null);
 
   const telemetry = useTelemetry(1000);
-  const herd = useHerd(50, 1000);
+  const herd = useHerd(50, 4000);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -72,8 +72,8 @@ export default function App() {
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         <AnimatePresence mode="wait">
-          {activeTab === "ops" ? (
-            <OperationsTab
+          {activeTab === "dashboard" ? (
+            <Dashboard
               telemetry={telemetry}
               herd={herd}
               sms={toastMessage}

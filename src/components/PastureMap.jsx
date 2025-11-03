@@ -82,52 +82,6 @@ function computeBounds(featureCollection) {
   ];
 }
 
-function buildCowPopup(cow) {
-  const immunizationRows = cow.immunizations
-    ?.map(
-      (record) => `
-        <tr>
-          <td class="px-0.5 py-0.5 text-[10px] font-semibold text-neutral-200">${record.label}</td>
-          <td class="px-0.5 py-0.5 text-[10px] text-neutral-400">${record.date}</td>
-        </tr>
-      `,
-    )
-    .join("") ?? "";
-  const lastPing = formatRelativeFromNow(cow.lastSeenTs);
-
-  return `
-    <div class="min-w-[220px] text-xs text-neutral-100">
-      <div class="text-[11px] uppercase tracking-wide text-emerald-300">${cow.tag} · ${cow.id}</div>
-      <div class="mt-1 grid grid-cols-2 gap-x-2 gap-y-1">
-        <div>Weight: <strong>${cow.weight} lb</strong></div>
-        <div>Condition: <strong>${cow.bodyCondition}</strong></div>
-        <div>Breed: <strong>${cow.breed}</strong></div>
-        <div>Age: <strong>${cow.ageYears} yrs</strong></div>
-        <div>Pregnancy: <strong>${cow.pregnancy}</strong></div>
-        <div>Avg gain: <strong>${cow.avgDailyGain} lb</strong></div>
-        <div>Distance hub: <strong>${Math.round(cow.distanceFromCenter)} m</strong></div>
-        <div>Nearest fence: <strong>${Math.round(cow.distanceToFence)} m</strong></div>
-      </div>
-      <div class="mt-1">Last treatment: ${cow.lastTreatment}</div>
-      <div class="mt-1">Last check: ${cow.lastCheck}</div>
-      <div class="mt-1">Last ping: ${lastPing}</div>
-      <div class="mt-1">Temperature: ${cow.temperature} °F</div>
-      <div class="mt-1">Notes: ${cow.notes}</div>
-      <div class="mt-1">Health: ${cow.healthNote}</div>
-      ${immunizationRows
-        ? `<div class="mt-2">
-            <div class="text-[10px] uppercase tracking-wide text-neutral-400">Immunizations</div>
-            <table class="mt-1 w-full border-collapse">
-              <tbody>
-                ${immunizationRows}
-              </tbody>
-            </table>
-          </div>`
-        : ""}
-    </div>
-  `;
-}
-
 export function PastureMap({
   cows,
   trails,
@@ -145,7 +99,6 @@ export function PastureMap({
   const mapRef = useRef(null);
   const drawRef = useRef(null);
   const suppressDrawEventsRef = useRef(false);
-  const popupRef = useRef(null);
   const cowsRef = useRef(cows);
   const onPasturesChangeRef = useRef(onPasturesChange);
   const onSelectCowRef = useRef(onSelectCow);
@@ -340,11 +293,12 @@ export function PastureMap({
         type: "circle",
         source: cowsSourceId,
         paint: {
-          "circle-radius": 8,
+          "circle-radius": 10,
           "circle-color": "#facc15",
-          "circle-opacity": 0.35,
-          "circle-stroke-color": "#facc15",
-          "circle-stroke-width": 1,
+          "circle-opacity": 0.25,
+          "circle-stroke-color": "#fde68a",
+          "circle-stroke-width": 2,
+          "circle-blur": 0.4,
         },
         filter: ["==", ["get", "id"], ""],
       });
@@ -434,8 +388,6 @@ export function PastureMap({
       cancelled = true;
       drawRef.current = null;
       onDrawReadyRef.current?.(false);
-      popupRef.current?.remove();
-      popupRef.current = null;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -566,19 +518,9 @@ export function PastureMap({
         map.setFilter(selectedCowLayerId, ["==", ["get", "id"], activeCow?.id ?? ""]);
       }
     }
-    if (!activeCow || groupSelectionIds.length > 0) {
-      popupRef.current?.remove();
-      popupRef.current = null;
-      return;
-    }
-    const popup = popupRef.current ?? new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 12 });
-    popupRef.current = popup;
-    popup.setLngLat([activeCow.lon, activeCow.lat]).setHTML(buildCowPopup(activeCow)).addTo(map);
   }, [selectedCow, selectedCowId, cows, groupSelectionIds]);
 
   const handleClearSelection = () => {
-    popupRef.current?.remove();
-    popupRef.current = null;
     onSelectCowRef.current?.(null);
     setGroupSelectionIds([]);
   };
