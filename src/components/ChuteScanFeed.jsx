@@ -3,7 +3,7 @@ import { formatNow } from "../utils/time.js";
 
 const depthPalette = ["#22d3ee", "#38bdf8", "#8b5cf6", "#f97316"];
 
-export function ChuteScanFeed({ src = "/chute-scan.mp4", variant = "compact" }) {
+export function ChuteScanFeed({ src = "/chute-scan.mp4", variant = "compact", className = "" }) {
   const [timestamp, setTimestamp] = useState(() => formatNow());
   const [fallback, setFallback] = useState(false);
 
@@ -12,10 +12,13 @@ export function ChuteScanFeed({ src = "/chute-scan.mp4", variant = "compact" }) 
     return () => clearInterval(id);
   }, []);
 
-  const heightClass = variant === "expanded" ? "h-[260px] sm:h-[340px] lg:h-[420px]" : "h-[180px] sm:h-[220px]";
+  const heightClass =
+    variant === "expanded" ? "h-[220px] sm:h-[280px] lg:h-[320px]" : "h-[160px] sm:h-[200px]";
 
   return (
-    <div className={`relative ${heightClass} overflow-hidden rounded-2xl border border-cyan-500/30 bg-black text-cyan-100 shadow-[0_0_25px_rgba(6,182,212,0.25)]`}>
+    <div
+      className={`relative ${heightClass} overflow-hidden rounded-2xl border border-cyan-500/30 bg-black text-cyan-100 shadow-[0_0_25px_rgba(6,182,212,0.25)] ${className}`}
+    >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-900/30 via-sky-500/10 to-purple-700/20" />
       <div className="absolute top-3 left-4 z-10 text-[11px] uppercase tracking-[0.2em] text-cyan-200">Chute scanner</div>
       <div className="absolute top-3 right-4 z-10 rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100">{timestamp}</div>

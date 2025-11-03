@@ -32,7 +32,7 @@ function paddocksToFeatures(paddocks) {
   }));
 }
 
-export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, onNotify }) {
+export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, onNotify, reportStatus, onSendReport }) {
   const [expandedPanel, setExpandedPanel] = useState(null);
   const [address, setAddress] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -61,6 +61,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
   const [pastures, setPastures] = useState(() => paddocksToFeatures(defaultPaddocks));
   const [selectedCowId, setSelectedCowId] = useState(null);
   const [drawReady, setDrawReady] = useState(false);
+  const [reportChannels, setReportChannels] = useState({ sms: true, backhaul: true });
 
   useEffect(() => {
     if (!expandedPanel) return;
@@ -111,7 +112,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
   };
 
   const panelBaseClasses =
-    "relative flex flex-col overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 transition duration-300 ease-out ring-1 ring-neutral-900/40";
+    "relative flex h-full flex-col overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 transition duration-300 ease-out ring-1 ring-neutral-900/40";
 
   const getPanelClasses = (panelId) => {
     const isExpanded = expandedPanel === panelId;
@@ -144,9 +145,17 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
   };
 
   const renderTelemetryPanel = (variant) => (
-    <div className={variant === "expanded" ? "p-4" : "p-3"}>
-      <TelemetryPanel telemetry={telemetry} sms={sms} selectedCow={selectedCow} variant={variant} />
-    </div>
+    <TelemetryPanel
+      telemetry={telemetry}
+      sms={sms}
+      selectedCow={selectedCow}
+      variant={variant}
+      className={variant === "expanded" ? "p-5" : "flex-1 p-3"}
+      reportStatus={reportStatus}
+      channels={reportChannels}
+      onChannelChange={setReportChannels}
+      onSendReport={onSendReport}
+    />
   );
 
   const renderMapPanel = (variant) => {
@@ -303,7 +312,8 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
 
   const renderExpandedPanel = (panelId) => {
     if (panelId === panelIds.cameras) return renderCameraPanel("expanded");
-    if (panelId === panelIds.telemetry) return renderTelemetryPanel("expanded");
+    if (panelId === panelIds.telemetry)
+      return renderTelemetryPanel("expanded");
     return renderMapPanel("expanded");
   };
 
@@ -348,7 +358,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 View detail
               </button>
             </header>
-            {renderCompactPanel(panelIds.cameras)}
+            <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.cameras)}</div>
           </section>
 
           <section className={getPanelClasses(panelIds.telemetry)}>
@@ -365,7 +375,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 View detail
               </button>
             </header>
-            {renderCompactPanel(panelIds.telemetry)}
+            <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.telemetry)}</div>
           </section>
 
           <section className={getPanelClasses(panelIds.map)}>
@@ -382,7 +392,7 @@ export function OperationsTab({ telemetry, herd, sms, options, onOptionsChange, 
                 View detail
               </button>
             </header>
-            {renderCompactPanel(panelIds.map)}
+            <div className="flex flex-1 flex-col">{renderCompactPanel(panelIds.map)}</div>
           </section>
         </div>
       </motion.section>

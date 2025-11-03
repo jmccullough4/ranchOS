@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useHerd } from "./hooks/useHerd.js";
 import { useTelemetry } from "./hooks/useTelemetry.js";
-import { randomInt } from "./utils/math.js";
 import { formatNow } from "./utils/time.js";
 import { DemoToast } from "./components/DemoToast.jsx";
 import { EidTab } from "./components/EidTab.jsx";
@@ -15,6 +14,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState("");
   const [rows, setRows] = useState([]);
   const [options, setOptions] = useState({ basemap: "satellite", breadcrumbs: true, heatmap: true });
+  const [reportStatus, setReportStatus] = useState(null);
 
   const telemetry = useTelemetry(1000);
   const herd = useHerd(50, 1000);
@@ -38,6 +38,18 @@ export default function App() {
     setToastMessage(message);
   };
 
+  const handleReport = (channels) => {
+    if (!channels?.length) {
+      setToastMessage("Select at least one delivery path before sending.");
+      return;
+    }
+
+    const timestamp = formatNow();
+    setReportStatus({ timestamp, channels });
+    const formatted = channels.join(" + ");
+    setToastMessage(`Herd status report dispatched via ${formatted}.`);
+  };
+
   return (
     <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
       <Header activeTab={activeTab} onTabChange={setActiveTab} />
@@ -52,6 +64,8 @@ export default function App() {
               options={options}
               onOptionsChange={setOptions}
               onNotify={handleNotify}
+              reportStatus={reportStatus}
+              onSendReport={handleReport}
             />
           ) : (
             <EidTab rows={rows} onAddRow={handleAddRow} onPrintReceipt={handleReceipt} />

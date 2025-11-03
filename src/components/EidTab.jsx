@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { randomInt } from "../utils/math.js";
 import { formatNow } from "../utils/time.js";
 import { Field } from "./Field.jsx";
+import { ChuteScanFeed } from "./ChuteScanFeed.jsx";
 
 function printReceipt(row) {
   if (!row) return;
@@ -36,8 +37,8 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
           <div className="text-xs text-neutral-400">Bluetooth EID reader · Scale</div>
         </div>
         <div className="space-y-4 p-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-            <div className="space-y-3">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)] lg:items-start">
+            <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="EID" value={latest?.eid || "84000…"} />
                 <Field label="Weight (lb)" value={latest?.weight || "—"} />
@@ -48,26 +49,30 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
                 <Field label="Temp" value={latest ? `${chuteTemp} °F` : "—"} />
                 <Field label="Disposition" value={latest ? "Calm" : "—"} />
               </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Operator" value="K. Benton" />
+                <Field label="Reader" value="Gallagher HR5" />
+                <Field label="Backhaul" value="Starlink LTE" />
+              </div>
             </div>
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-transparent to-sky-500/20 shadow-[0_0_35px_rgba(16,185,129,0.18)]">
-              <video
-                src="/chute-scan.mp4"
-                className="h-full w-full object-cover opacity-70 mix-blend-screen"
-                autoPlay
-                muted
-                loop
-                playsInline
-              />
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#2dd4bf22,transparent_60%)]" />
-              <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/65 to-transparent px-3 py-2 text-[11px] uppercase tracking-wide text-emerald-200">
-                <span>Chute 3 · Depth vision</span>
-                <span>LIVE</span>
+            <div className="space-y-3">
+              <ChuteScanFeed variant="expanded" className="w-full" />
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wide text-neutral-500">Live vitals</span>
+                  <span className="text-neutral-200">Queue ready</span>
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wide text-neutral-500">Scale drift</div>
+                    <div className="text-sm text-neutral-100">±0.4 lb</div>
+                  </div>
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wide text-neutral-500">Reader RSSI</div>
+                    <div className="text-sm text-neutral-100">-62 dBm</div>
+                  </div>
+                </div>
               </div>
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-between px-4 pb-3 text-[10px] uppercase tracking-[0.2em] text-emerald-200/80">
-                <span>Frame sync 4D</span>
-                <span>Scan mesh</span>
-              </div>
-              <div className="scan-visor pointer-events-none absolute inset-0" />
             </div>
           </div>
           <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3">

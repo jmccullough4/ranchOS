@@ -1,16 +1,46 @@
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Field } from "./Field.jsx";
 
-export function TelemetryPanel({ telemetry, sms, selectedCow, variant = "compact" }) {
+export function TelemetryPanel({
+  telemetry,
+  sms,
+  selectedCow,
+  variant = "compact",
+  className = "",
+  reportStatus,
+  channels,
+  onChannelChange,
+  onSendReport,
+}) {
   const chartHeight = variant === "expanded" ? "h-48" : "h-36";
   const wrapperPadding = variant === "expanded" ? "gap-5 p-5" : "gap-4 p-4";
+  const showInternalHeader = variant === "expanded";
+  const selectedChannels = channels ?? { sms: false, backhaul: false };
+  const hasChannel = selectedChannels.sms || selectedChannels.backhaul;
+
+  const toggleChannel = (key) => {
+    onChannelChange?.({ ...selectedChannels, [key]: !selectedChannels[key] });
+  };
+
+  const handleSendReport = () => {
+    const mediums = [];
+    if (selectedChannels.sms) mediums.push("SMS uplink");
+    if (selectedChannels.backhaul) mediums.push("Backhaul uplink");
+    onSendReport?.(mediums);
+  };
+
+  const lastReportCopy = reportStatus
+    ? `${reportStatus.timestamp} · ${reportStatus.channels.join(" + ")}`
+    : "No report sent yet";
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-        <div className="font-medium">Telemetry</div>
-        <div className="text-xs text-neutral-400">LoRaWAN → MQTT</div>
-      </div>
+    <div className={`flex h-full flex-col overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 ${className}`}>
+      {showInternalHeader && (
+        <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+          <div className="font-medium">Telemetry</div>
+          <div className="text-xs text-neutral-400">LoRaWAN → MQTT</div>
+        </div>
+      )}
       <div className={`grid ${wrapperPadding}`}>
         <div className={`${chartHeight} rounded-2xl border border-neutral-800 bg-neutral-950 p-3`}>
           <div className="mb-1 text-xs text-neutral-400">Trough level (%)</div>
@@ -60,12 +90,54 @@ export function TelemetryPanel({ telemetry, sms, selectedCow, variant = "compact
               <div>ID: {selectedCow.id}</div>
               <div>Weight: {selectedCow.weight} lb</div>
               <div>Body condition: {selectedCow.bodyCondition}</div>
+              <div>Breed: {selectedCow.breed}</div>
+              <div>Age: {selectedCow.ageYears} yrs</div>
+              <div>Pregnancy: {selectedCow.pregnancy}</div>
+              <div>Avg daily gain: {selectedCow.avgDailyGain} lb</div>
+              <div>Temperature: {selectedCow.temperature} °F</div>
               <div>Last treatment: {selectedCow.lastTreatment}</div>
               <div className="md:col-span-2">Last check: {selectedCow.lastCheck}</div>
               <div className="md:col-span-2">Notes: {selectedCow.notes}</div>
+              <div className="md:col-span-2">Health focus: {selectedCow.healthNote}</div>
             </div>
           </div>
         )}
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-neutral-500">Herd status report</div>
+              <div className="mt-1 text-neutral-200">{lastReportCopy}</div>
+            </div>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <div className="flex flex-wrap gap-3">
+                <label className="inline-flex items-center gap-2 text-neutral-200">
+                  <input
+                    type="checkbox"
+                    checked={selectedChannels.sms}
+                    onChange={() => toggleChannel("sms")}
+                  />
+                  SMS uplink
+                </label>
+                <label className="inline-flex items-center gap-2 text-neutral-200">
+                  <input
+                    type="checkbox"
+                    checked={selectedChannels.backhaul}
+                    onChange={() => toggleChannel("backhaul")}
+                  />
+                  Internet backhaul
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={handleSendReport}
+                disabled={!hasChannel}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>Publish report</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

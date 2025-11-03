@@ -87,9 +87,15 @@ function buildCowPopup(cow) {
       <div class="text-[11px] uppercase tracking-wide text-emerald-300">${cow.tag} · ${cow.id}</div>
       <div class="mt-1">Weight: <strong>${cow.weight} lb</strong></div>
       <div class="mt-1">Body condition: <strong>${cow.bodyCondition}</strong></div>
+      <div class="mt-1">Breed: <strong>${cow.breed}</strong></div>
+      <div class="mt-1">Age: <strong>${cow.ageYears} yrs</strong></div>
+      <div class="mt-1">Pregnancy: <strong>${cow.pregnancy}</strong></div>
       <div class="mt-1">Last treatment: ${cow.lastTreatment}</div>
       <div class="mt-1">Last check: ${cow.lastCheck}</div>
+      <div class="mt-1">Avg daily gain: ${cow.avgDailyGain} lb</div>
+      <div class="mt-1">Temperature: ${cow.temperature} °F</div>
       <div class="mt-1">Notes: ${cow.notes}</div>
+      <div class="mt-1">Health: ${cow.healthNote}</div>
     </div>
   `;
 }
@@ -359,6 +365,12 @@ export function PastureMap({
             lastCheck: cow.lastCheck,
             notes: cow.notes,
             lastTreatment: cow.lastTreatment,
+            breed: cow.breed,
+            ageYears: cow.ageYears,
+            pregnancy: cow.pregnancy,
+            avgDailyGain: cow.avgDailyGain,
+            temperature: cow.temperature,
+            healthNote: cow.healthNote,
           },
           geometry: { type: "Point", coordinates: [cow.lon, cow.lat] },
         })),
@@ -479,6 +491,14 @@ export function PastureMap({
                 <dd className="text-sm text-neutral-100">{overlayCow.bodyCondition}</dd>
               </div>
               <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Breed</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.breed}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Age</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.ageYears} yrs</dd>
+              </div>
+              <div>
                 <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Last treatment</dt>
                 <dd className="text-sm text-neutral-100">{overlayCow.lastTreatment}</dd>
               </div>
@@ -486,9 +506,25 @@ export function PastureMap({
                 <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Last check</dt>
                 <dd className="text-sm text-neutral-100">{overlayCow.lastCheck}</dd>
               </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Pregnancy</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.pregnancy}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Avg daily gain</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.avgDailyGain} lb</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Temperature</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.temperature} °F</dd>
+              </div>
               <div className="col-span-2">
                 <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Notes</dt>
                 <dd className="text-sm text-neutral-100">{overlayCow.notes}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-[10px] uppercase tracking-wide text-neutral-500">Health focus</dt>
+                <dd className="text-sm text-neutral-100">{overlayCow.healthNote}</dd>
               </div>
             </dl>
           </div>

@@ -9,6 +9,12 @@ function randomChoice(list) {
 
 function createCow(index) {
   const baseWeight = 1050 + Math.random() * 250;
+  const breeds = ["Brangus", "Angus", "Red Angus", "Hereford", "Charolais"];
+  const statuses = ["Bred", "Open", "Heavy bred", "Pair"];
+  const healthFlags = ["BQA compliant", "Watch locomotion", "Excellent gain", "Vaccinated 30d", "Monitor hoof"];
+  const getHealthNote = () => healthFlags[Math.floor(Math.random() * healthFlags.length)];
+  const age = Math.floor(Math.random() * 4) + 3;
+  const pregnancy = statuses[Math.floor(Math.random() * statuses.length)];
   return {
     id: `C-${String(index).padStart(3, "0")}`,
     tag: `840-3S-${String(3100 + index).padStart(4, "0")}`,
@@ -17,6 +23,12 @@ function createCow(index) {
     lastCheck: `${Math.floor(Math.random() * 4) + 1} days ago`,
     lastTreatment: randomChoice(["Vita Charge", "Dewormer", "Respiratory Booster", "Implant"]),
     notes: randomChoice(["Bred AI", "Excellent gain", "Monitor hoof", "Ready for market"]),
+    breed: randomChoice(breeds),
+    ageYears: age,
+    pregnancy,
+    avgDailyGain: (2.1 + Math.random() * 0.6).toFixed(1),
+    temperature: (100.5 + Math.random() * 1.4).toFixed(1),
+    healthNote: getHealthNote(),
     lon: ranchBounds.minLon + Math.random() * (ranchBounds.maxLon - ranchBounds.minLon),
     lat: ranchBounds.minLat + Math.random() * (ranchBounds.maxLat - ranchBounds.minLat),
     vx: (Math.random() - 0.5) * 0.00015,
