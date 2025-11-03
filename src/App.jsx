@@ -28,10 +28,6 @@ export default function App() {
     setRows((previous) => [...previous, row]);
   };
 
-  const handleReceipt = (row) => {
-    setToastMessage(`Receipt prepared for ${row.eid}`);
-  };
-
   const handleNotify = (message) => {
     if (!message) return;
     setToastMessage(message);
@@ -78,7 +74,6 @@ export default function App() {
           onSendReport={handleReport}
           rows={rows}
           onAddRow={handleAddRow}
-          onPrintReceipt={handleReceipt}
         />
       </main>
 
