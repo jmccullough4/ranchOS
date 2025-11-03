@@ -1,18 +1,7 @@
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Field } from "./Field.jsx";
-import { formatRelativeFromNow } from "../utils/time.js";
 
-export function TelemetryPanel({
-  telemetry,
-  sms,
-  selectedCow,
-  variant = "compact",
-  className = "",
-  reportStatus,
-  channels,
-  onChannelChange,
-  onSendReport,
-}) {
+export function TelemetryPanel({ telemetry, sms, variant = "compact", className = "", reportStatus, channels, onChannelChange, onSendReport }) {
   const chartHeight = variant === "expanded" ? "h-48" : "h-36";
   const wrapperPadding = variant === "expanded" ? "gap-5 p-5" : "gap-4 p-4";
   const showInternalHeader = variant === "expanded";
@@ -83,43 +72,6 @@ export function TelemetryPanel({
           <Field label="Water level" value={`${Math.round(telemetry.waterPct)}%`} />
           <Field label="Last alert" value={sms || telemetry.alerts} />
         </div>
-        {selectedCow && (
-          <div className="rounded-2xl border border-emerald-600/40 bg-emerald-500/10 p-3 text-xs text-emerald-100">
-            <div className="text-xs uppercase tracking-wide text-emerald-300">Focus animal</div>
-            <div className="mt-1 text-sm font-semibold text-emerald-100">{selectedCow.tag}</div>
-            <div className="mt-1 grid gap-1 md:grid-cols-2">
-              <div>ID: {selectedCow.id}</div>
-              <div>Weight: {selectedCow.weight} lb</div>
-              <div>Body condition: {selectedCow.bodyCondition}</div>
-              <div>Breed: {selectedCow.breed}</div>
-              <div>Age: {selectedCow.ageYears} yrs</div>
-              <div>Pregnancy: {selectedCow.pregnancy}</div>
-              <div>Avg daily gain: {selectedCow.avgDailyGain} lb</div>
-              <div>Temperature: {selectedCow.temperature} °F</div>
-              <div>Last treatment: {selectedCow.lastTreatment}</div>
-              <div className="md:col-span-2">Last check: {selectedCow.lastCheck}</div>
-              <div>Nearest fence: {Math.round(selectedCow.distanceToFence)} m</div>
-              <div>Hub distance: {Math.round(selectedCow.distanceFromCenter)} m</div>
-              <div className="md:col-span-2">Last ping: {formatRelativeFromNow(selectedCow.lastSeenTs)}</div>
-              <div className="md:col-span-2">Notes: {selectedCow.notes}</div>
-              <div className="md:col-span-2">Health focus: {selectedCow.healthNote}</div>
-            </div>
-            {selectedCow.immunizations?.length ? (
-              <div className="mt-2 space-y-1 text-[11px]">
-                <div className="text-[10px] uppercase tracking-wide text-emerald-300">Immunization log</div>
-                {selectedCow.immunizations.map((record) => (
-                  <div key={record.id} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-100">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold">{record.label}</span>
-                      <span className="text-[10px] text-emerald-200">{record.date}</span>
-                    </div>
-                    <div className="text-[10px] text-emerald-200/80">{record.category} · {record.location} · {record.lot}</div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        )}
         <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
