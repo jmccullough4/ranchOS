@@ -123,7 +123,7 @@ export function EidTab({ rows, onAddRow, onPrintReceipt }) {
               }
               className="rounded-xl border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm hover:bg-neutral-700"
             >
-              + Scan demo
+              + Log chute scan
             </button>
             <button
               type="button"
