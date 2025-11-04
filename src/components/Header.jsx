@@ -48,7 +48,7 @@ function SensorStatus({ label, value, detail, tone, icon = null }) {
   );
 }
 
-export function Header({ telemetry, herd, user, onLogout }) {
+export function Header({ telemetry, herd, user, onLogout, activeScreen = "map", onNavigate, threatActive = false }) {
   const displayName = user?.name ?? user?.username ?? "";
   const networkTone =
     telemetry.networkHealth <= 70 ? "critical" : telemetry.networkHealth <= 90 ? "warning" : "nominal";
@@ -61,19 +61,6 @@ export function Header({ telemetry, herd, user, onLogout }) {
       tone: telemetry.waterPct <= 30 ? "critical" : telemetry.waterPct <= 55 ? "warning" : "nominal",
     },
     {
-      id: "network",
-      label: "Backhaul link",
-      value: `${telemetry.networkHealth}% uptime`,
-      detail:
-        telemetry.networkHealth >= 95
-          ? "Multi-path link healthy"
-          : telemetry.networkHealth >= 80
-            ? "Monitoring packet loss on ridge repeater"
-            : "Inspect gateway and antennas",
-      tone: networkTone,
-      icon: <SignalStrengthIcon strength={telemetry.networkHealth} tone={networkTone} />,
-    },
-    {
       id: "fence",
       label: "Fence",
       value: `${telemetry.fenceKv.toFixed(1)} kV at energizer`,
@@ -82,7 +69,7 @@ export function Header({ telemetry, herd, user, onLogout }) {
     },
     {
       id: "network",
-      label: "Link",
+      label: "Network status",
       value: `${telemetry.networkHealth}% uptime`,
       detail:
         telemetry.networkHealth >= 95
@@ -103,20 +90,27 @@ export function Header({ telemetry, herd, user, onLogout }) {
     uniqueStatuses.push(status);
   }
 
+  const navItems = [
+    { id: "map", label: "Operations map" },
+    { id: "processing", label: "Chute sync" },
+  ];
+
+  const herdCount = herd?.cows?.length ?? 0;
+
   return (
-    <header className="sticky top-0 z-20 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <header className="sticky top-0 z-30 border-b border-neutral-800/70 bg-neutral-950/85 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="3 Strands Cattle Co. logo" className="h-10 w-10 rounded-full border border-neutral-800 bg-neutral-900 object-contain" />
+            <img src="/logo.png" alt="3 Strands Cattle Co. logo" className="h-11 w-11 rounded-full border border-neutral-800 bg-neutral-900 object-contain" />
             <div>
-              <div className="text-xs uppercase tracking-widest text-neutral-400">3 Strands Cattle Co.</div>
-              <div className="text-xl font-semibold text-neutral-50">ranchOS Operations</div>
-              <div className="text-xs text-neutral-500">Security · Telemetry · Herd management</div>
+              <div className="text-xs uppercase tracking-[0.45em] text-neutral-500">ranchOS</div>
+              <div className="text-2xl font-semibold text-neutral-50">3 Strands Cattle Co. command center</div>
+              <div className="text-xs text-neutral-500">1375 Duette Rd · Duette, FL 34219</div>
             </div>
           </div>
-          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/80 px-3 py-2">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <div className="rounded-3xl border border-neutral-800 bg-neutral-900/70 px-4 py-3">
               <div className="text-[10px] uppercase tracking-[0.35em] text-neutral-500">Sensor status</div>
               <div className="mt-2 flex flex-wrap gap-3">
                 {uniqueStatuses.map((status) => (
@@ -125,7 +119,7 @@ export function Header({ telemetry, herd, user, onLogout }) {
               </div>
             </div>
             {user && (
-              <div className="flex items-center gap-3 rounded-2xl border border-neutral-800 bg-neutral-900/80 px-3 py-2 text-right">
+              <div className="flex items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/70 px-4 py-3 text-right">
                 <div>
                   <div className="text-[10px] uppercase tracking-wide text-neutral-500">Signed in</div>
                   <div className="text-sm font-semibold text-neutral-100">{displayName}</div>
@@ -134,12 +128,49 @@ export function Header({ telemetry, herd, user, onLogout }) {
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-300 hover:border-emerald-500/50"
+                  className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-300 hover:border-emerald-500/50"
                 >
                   Log out
                 </button>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <nav className="flex flex-wrap items-center gap-2 text-sm">
+            {navItems.map((item) => {
+              const isActive = item.id === activeScreen;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onNavigate?.(item.id)}
+                  className={`rounded-full border px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] transition ${
+                    isActive
+                      ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-100 shadow-[0_0_12px_rgba(52,211,153,0.3)]"
+                      : "border-neutral-800 bg-neutral-900/70 text-neutral-300 hover:border-emerald-400/40 hover:text-neutral-100"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.25em] text-neutral-500">
+            <span>Herd {herdCount} head</span>
+            <span className="h-1 w-1 rounded-full bg-neutral-700" aria-hidden />
+            <span>Network status {telemetry.networkHealth}% uptime</span>
+            <span className="h-1 w-1 rounded-full bg-neutral-700" aria-hidden />
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-semibold tracking-[0.2em] ${
+                threatActive
+                  ? "border-rose-500/50 bg-rose-500/15 text-rose-200"
+                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              }`}
+            >
+              {threatActive ? "Perimeter watch active" : "Perimeter secure"}
+            </span>
           </div>
         </div>
       </div>

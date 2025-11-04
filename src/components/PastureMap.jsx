@@ -12,45 +12,86 @@ const ranchSourceId = "ranch-bounds";
 const selectedCowLayerId = "cow-selected";
 const activePastureLayerId = "paddock-active";
 const drawStylesheetId = "mapbox-draw-stylesheet";
+const mapboxScriptId = "mapbox-gl-js";
+const mapboxStylesheetId = "mapbox-gl-js-css";
+const mapboxScriptUrl = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js";
+const mapboxStylesheetUrl = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css";
 const mapboxTerrainSourceId = "mapbox-dem";
 const skyLayerId = "ranchos-sky";
+const buildingLayerId = "ranchos-3d-buildings";
 
-function createFallbackStyle() {
-  if (!hasMapboxToken) {
-    return "https://demotiles.maplibre.org/style.json";
+function getMapStyle(isMapbox) {
+  if (isMapbox) {
+    return "mapbox://styles/mapbox/satellite-streets-v12";
+  }
+  return "https://demotiles.maplibre.org/style.json";
+}
+
+function ensureMapboxStylesheet() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(mapboxStylesheetId)) return;
+  const link = document.createElement("link");
+  link.id = mapboxStylesheetId;
+  link.rel = "stylesheet";
+  link.href = mapboxStylesheetUrl;
+  document.head.appendChild(link);
+}
+
+async function loadMapImplementation() {
+  if (!hasMapboxToken || typeof window === "undefined") {
+    return { library: maplibregl, isMapbox: false };
   }
 
-  return {
-    version: 8,
-    sources: {
-      satellite: {
-        type: "raster",
-        tiles: [`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}`],
-        tileSize: 256,
-        attribution: "© Mapbox © OpenStreetMap contributors",
-      },
-      dark: {
-        type: "raster",
-        tiles: [`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}`],
-        tileSize: 256,
-        attribution: "© Mapbox © OpenStreetMap contributors",
-      },
-    },
-    layers: [
-      {
-        id: "satellite",
-        type: "raster",
-        source: "satellite",
-        layout: { visibility: "visible" },
-      },
-      {
-        id: "dark",
-        type: "raster",
-        source: "dark",
-        layout: { visibility: "none" },
-      },
-    ],
+  ensureMapboxStylesheet();
+
+  const attach = (mapbox) => {
+    if (!mapbox) return { library: maplibregl, isMapbox: false };
+    mapbox.accessToken = mapboxToken;
+    window.mapboxgl = mapbox;
+    return { library: mapbox, isMapbox: true };
   };
+
+  if (window.mapboxgl) {
+    return attach(window.mapboxgl);
+  }
+
+  if (window.__ranchosMapboxPromise) {
+    try {
+      const mapbox = await window.__ranchosMapboxPromise;
+      return attach(mapbox);
+    } catch (error) {
+      console.warn("Failed to load Mapbox GL JS, falling back to MapLibre", error);
+      window.__ranchosMapboxPromise = undefined;
+      return { library: maplibregl, isMapbox: false };
+    }
+  }
+
+  window.__ranchosMapboxPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.id = mapboxScriptId;
+    script.src = mapboxScriptUrl;
+    script.async = true;
+    script.onload = () => {
+      if (window.mapboxgl) {
+        resolve(window.mapboxgl);
+      } else {
+        reject(new Error("Mapbox GL JS failed to initialize"));
+      }
+    };
+    script.onerror = (event) => {
+      reject(event?.error ?? new Error("Failed to load Mapbox GL JS script"));
+    };
+    document.head.appendChild(script);
+  });
+
+  try {
+    const mapbox = await window.__ranchosMapboxPromise;
+    return attach(mapbox);
+  } catch (error) {
+    console.warn("Failed to load Mapbox GL JS, falling back to MapLibre", error);
+    window.__ranchosMapboxPromise = undefined;
+    return { library: maplibregl, isMapbox: false };
+  }
 }
 
 const drawStyles = [
@@ -197,6 +238,9 @@ export function PastureMap({
   onSelectCow,
   onDrawReady,
   variant = "compact",
+  enableDrawing = true,
+  showCowOverlay = true,
+  showGroupOverlay = true,
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -215,6 +259,7 @@ export function PastureMap({
   const [drawReadyInternal, setDrawReadyInternal] = useState(false);
   const [activeDrawMode, setActiveDrawMode] = useState("simple_select");
   const hasFitInitialBoundsRef = useRef(false);
+  const mapEngineRef = useRef({ isMapbox: false });
 
   useEffect(() => {
     cowsRef.current = cows;
@@ -297,17 +342,19 @@ export function PastureMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const ensureDrawStyles = () => {
-      if (typeof document === "undefined") return;
-      if (document.getElementById(drawStylesheetId)) return;
-      const link = document.createElement("link");
-      link.id = drawStylesheetId;
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.0/dist/mapbox-gl-draw.css";
-      document.head.appendChild(link);
-    };
-
     const loadDraw = () => {
+      if (!enableDrawing || !hasMapboxToken) return Promise.resolve(null);
+
+      const ensureDrawStyles = () => {
+        if (typeof document === "undefined") return;
+        if (document.getElementById(drawStylesheetId)) return;
+        const link = document.createElement("link");
+        link.id = drawStylesheetId;
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.0/dist/mapbox-gl-draw.css";
+        document.head.appendChild(link);
+      };
+
       if (typeof window === "undefined") return Promise.resolve(null);
       ensureDrawStyles();
       if (window.MapboxDraw) return Promise.resolve(window.MapboxDraw);
@@ -362,12 +409,14 @@ export function PastureMap({
       map.on("mouseleave", "cow-dots", pointerLeave);
     };
 
-    const applyTerrainEnhancements = (map) => {
-      if (map.setProjection) {
+    const applyTerrainEnhancements = (map, engine) => {
+      const isMapbox = engine?.isMapbox ?? false;
+
+      if (isMapbox && map.setProjection) {
         map.setProjection({ name: "globe" });
       }
       if (!map.getSource(mapboxTerrainSourceId)) {
-        if (hasMapboxToken) {
+        if (isMapbox) {
           map.addSource(mapboxTerrainSourceId, {
             type: "raster-dem",
             url: "mapbox://mapbox.mapbox-terrain-dem-v1",
@@ -383,16 +432,22 @@ export function PastureMap({
           });
         }
       }
-      map.setTerrain({ source: mapboxTerrainSourceId, exaggeration: hasMapboxToken ? 1.5 : 1.25 });
-      map.setFog({
-        range: [0.6, 8],
-        color: "#0b1220",
-        "high-color": hasMapboxToken ? "#1f2937" : "#1f2937",
-        "horizon-blend": 0.4,
-        "space-color": "#020617",
-        "star-intensity": hasMapboxToken ? 0.12 : 0.08,
-      });
-      if (!map.getLayer(skyLayerId)) {
+      if (map.setTerrain) {
+        map.setTerrain({ source: mapboxTerrainSourceId, exaggeration: isMapbox ? 1.65 : 1.25 });
+      }
+
+      if (map.setFog) {
+        map.setFog({
+          range: [0.6, 8],
+          color: "#0b1220",
+          "high-color": "#1f2937",
+          "horizon-blend": 0.4,
+          "space-color": "#020617",
+          "star-intensity": isMapbox ? 0.16 : 0.08,
+        });
+      }
+
+      if (isMapbox && !map.getLayer(skyLayerId)) {
         map.addLayer({
           id: skyLayerId,
           type: "sky",
@@ -404,30 +459,56 @@ export function PastureMap({
           },
         });
       }
+
+      if (isMapbox && !map.getLayer(buildingLayerId) && map.getSource("composite")) {
+        const beforeLayerId = map
+          .getStyle()
+          ?.layers?.find((layer) => layer.type === "symbol" && layer.layout?.["text-field"])?.id;
+        map.addLayer(
+          {
+            id: buildingLayerId,
+            source: "composite",
+            "source-layer": "building",
+            type: "fill-extrusion",
+            minzoom: 15,
+            paint: {
+              "fill-extrusion-color": ["case", ["has", "underground"], "#1f2937", "#334155"],
+              "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, ["get", "height"], 16, ["get", "height"], 17,
+                ["get", "height"]],
+              "fill-extrusion-opacity": 0.7,
+            },
+          },
+          beforeLayerId,
+        );
+      }
     };
 
-    loadDraw()
-      .catch(() => null)
-      .then((DrawCtor) => {
+    const bootstrap = async () => {
+      try {
+        const DrawCtor = await loadDraw().catch(() => null);
         if (cancelled || mapRef.current) return;
 
-        const map = new maplibregl.Map({
+        const { library: mapLibrary, isMapbox } = await loadMapImplementation();
+        if (cancelled || mapRef.current) return;
+
+        const MapClass = mapLibrary.Map ?? mapLibrary;
+        const map = new MapClass({
           container: mapContainerRef.current,
-          style: createFallbackStyle(),
+          style: getMapStyle(isMapbox),
           center: [ranchCenter.lon, ranchCenter.lat],
-          zoom: hasMapboxToken ? 13.6 : 15.2,
-          pitch: hasMapboxToken ? 47 : 0,
-          bearing: hasMapboxToken ? -18 : 0,
+          zoom: isMapbox ? 13.6 : 15.2,
+          pitch: isMapbox ? 47 : 0,
+          bearing: isMapbox ? -18 : 0,
           attributionControl: true,
         });
 
-        if (hasMapboxToken && map.setProjection) {
-          map.setProjection({ name: "globe" });
-        }
+        mapEngineRef.current = { isMapbox };
 
         mapRef.current = map;
 
-        map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
+        if (mapLibrary.NavigationControl) {
+          map.addControl(new mapLibrary.NavigationControl({ showCompass: true }), "top-right");
+        }
 
         let drawInstance = null;
 
@@ -449,7 +530,7 @@ export function PastureMap({
           onPasturesChangeRef.current?.(features);
         };
 
-        if (DrawCtor) {
+        if (enableDrawing && DrawCtor) {
           drawInstance = new DrawCtor({
             displayControlsDefault: false,
             controls: {},
@@ -654,7 +735,7 @@ export function PastureMap({
           }
 
           attachLayerInteractions(map);
-          applyTerrainEnhancements(map);
+          applyTerrainEnhancements(map, { isMapbox });
         };
 
         map.on("load", ensureCustomLayers);
@@ -675,10 +756,13 @@ export function PastureMap({
             onSelectCowRef.current?.(null);
           }
         });
-      })
-      .catch(() => {
+      } catch (error) {
+        console.warn("Unable to initialise map renderer", error);
         onDrawReadyRef.current?.(false);
-      });
+      }
+    };
+
+    bootstrap();
 
     return () => {
       cancelled = true;
@@ -686,6 +770,7 @@ export function PastureMap({
       setDrawReadyInternal(false);
       setActiveDrawMode("simple_select");
       onDrawReadyRef.current?.(false);
+      mapEngineRef.current = { isMapbox: false };
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -704,7 +789,7 @@ export function PastureMap({
       }
     };
 
-    if (hasMapboxToken) {
+    if (mapEngineRef.current.isMapbox) {
       setVisibility("satellite", options.basemap === "satellite");
       setVisibility("dark", options.basemap === "dark");
     }
@@ -809,12 +894,28 @@ export function PastureMap({
     }
   }, [selectedCow, selectedCowId, cows, groupSelectionIds]);
 
+  useEffect(() => {
+    if (groupSelectionIds.length > 0) return;
+    const map = mapRef.current;
+    if (!map) return;
+    if (!selectedCowId) return;
+    const cow = cows.find((item) => item.id === selectedCowId);
+    if (!cow) return;
+    const currentZoom = map.getZoom?.() ?? 15;
+    map.easeTo({ center: [cow.lon, cow.lat], zoom: Math.max(currentZoom, 15.2), duration: 1200 });
+  }, [selectedCowId, cows, groupSelectionIds.length]);
+
   const handleClearSelection = () => {
     onSelectCowRef.current?.(null);
     setGroupSelectionIds([]);
   };
 
-  const heightClass = variant === "expanded" ? "h-[420px] sm:h-[520px] lg:h-[600px]" : "h-[320px] sm:h-[340px]";
+  const heightClass =
+    variant === "immersive"
+      ? "h-full w-full"
+      : variant === "expanded"
+        ? "h-[420px] sm:h-[520px] lg:h-[600px]"
+        : "h-[320px] sm:h-[340px]";
 
   const handleClearGroup = () => {
     setGroupSelectionIds([]);
@@ -872,9 +973,12 @@ export function PastureMap({
     setActivePastureId(null);
   };
 
+  const frameClass =
+    variant === "immersive" ? "relative" : "relative overflow-hidden rounded-2xl shadow-[0_0_40px_rgba(16,185,129,0.08)]";
+
   return (
-    <div className={`relative ${heightClass} overflow-hidden rounded-2xl`}>
-      {overlayCow && (
+    <div className={`${frameClass} ${heightClass}`}>
+      {showCowOverlay && overlayCow && (
         <div className="pointer-events-none absolute left-3 top-3 z-20 w-64 max-w-[calc(100%-1.5rem)]">
           <div className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur">
             <div className="flex items-start justify-between gap-3">
@@ -976,7 +1080,7 @@ export function PastureMap({
           </div>
         </div>
       )}
-      {drawReadyInternal && (
+      {enableDrawing && drawReadyInternal && (
         <div className="pointer-events-none absolute right-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-col gap-2">
           <div className="pointer-events-auto rounded-2xl border border-neutral-800/70 bg-neutral-950/90 p-3 text-[11px] text-neutral-200 backdrop-blur">
             <div className="flex flex-wrap items-center gap-2">
@@ -1010,7 +1114,7 @@ export function PastureMap({
         </div>
       )}
       <div ref={mapContainerRef} className="h-full w-full" />
-      {activePasture && (
+      {enableDrawing && activePasture && (
         <div className="pointer-events-none absolute left-3 bottom-3 z-20 w-72 max-w-[calc(100%-1.5rem)]">
           <form
             onSubmit={handleRenameActivePasture}
@@ -1065,7 +1169,7 @@ export function PastureMap({
           </form>
         </div>
       )}
-      {groupStats && (
+      {showGroupOverlay && groupStats && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10 w-72 max-w-[calc(100%-1.5rem)]">
           <div className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur">
             <div className="flex items-start justify-between gap-3">

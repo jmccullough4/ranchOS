@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { useHerd } from "./hooks/useHerd.js";
 import { useTelemetry } from "./hooks/useTelemetry.js";
-import { formatNow } from "./utils/time.js";
 import { DemoToast } from "./components/DemoToast.jsx";
 import { LoginScreen } from "./components/LoginScreen.jsx";
 import { Footer } from "./components/Footer.jsx";
 import { Header } from "./components/Header.jsx";
-import { Dashboard } from "./components/Dashboard.jsx";
+import { MapScreen } from "./components/MapScreen.jsx";
+import { ProcessingScreen } from "./components/ProcessingScreen.jsx";
 
 export default function App() {
   const [toastMessage, setToastMessage] = useState("");
   const [rows, setRows] = useState([]);
-  const [options, setOptions] = useState({ basemap: "satellite", breadcrumbs: true, heatmap: true });
-  const [reportStatus, setReportStatus] = useState(null);
+  const [options, setOptions] = useState({ breadcrumbs: true, heatmap: true });
   const [user, setUser] = useState(null);
+  const [activeScreen, setActiveScreen] = useState("map");
 
   const telemetry = useTelemetry(1000);
   const herd = useHerd(50, 4000);
@@ -33,18 +33,6 @@ export default function App() {
     setToastMessage(message);
   };
 
-  const handleReport = (channels) => {
-    if (!channels?.length) {
-      setToastMessage("Select at least one delivery path before sending.");
-      return;
-    }
-
-    const timestamp = formatNow();
-    setReportStatus({ timestamp, channels });
-    const formatted = channels.join(" + ");
-    setToastMessage(`Herd status report dispatched via ${formatted}.`);
-  };
-
   if (!user) {
     return (
       <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
@@ -60,25 +48,26 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
-      <Header telemetry={telemetry} herd={herd} user={user} onLogout={() => setUser(null)} />
+    <div className="flex min-h-screen w-full flex-col bg-neutral-950 text-neutral-100">
+      <Header
+        telemetry={telemetry}
+        herd={herd}
+        user={user}
+        onLogout={() => setUser(null)}
+        activeScreen={activeScreen}
+        onNavigate={setActiveScreen}
+        threatActive={herd.cows.some((cow) => cow.isStray)}
+      />
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <Dashboard
-          telemetry={telemetry}
-          herd={herd}
-          options={options}
-          onOptionsChange={setOptions}
-          onNotify={handleNotify}
-          reportStatus={reportStatus}
-          onSendReport={handleReport}
-          rows={rows}
-          onAddRow={handleAddRow}
-        />
+      <main className="relative flex-1 overflow-hidden">
+        {activeScreen === "map" ? (
+          <MapScreen herd={herd} options={options} onOptionsChange={setOptions} onNotify={handleNotify} />
+        ) : (
+          <ProcessingScreen rows={rows} onAddRow={handleAddRow} onNotify={handleNotify} />
+        )}
       </main>
 
       <DemoToast message={toastMessage} />
-      <Footer />
     </div>
   );
 }
