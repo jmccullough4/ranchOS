@@ -7,7 +7,7 @@ export const ranchBounds = {
   maxLat: ranchCenter.lat + 0.0045,
 };
 
-export const defaultRanchAddress = "7715 231st St E, Myakka City, FL";
+export const defaultRanchAddress = "1375 Duette Rd, Duette, FL 34219";
 
 export const defaultRanchBoundary = {
   type: "FeatureCollection",
