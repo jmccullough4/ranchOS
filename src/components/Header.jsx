@@ -61,8 +61,15 @@ export function Header({ telemetry, herd, user, onLogout, activeScreen = "map", 
       tone: telemetry.waterPct <= 30 ? "critical" : telemetry.waterPct <= 55 ? "warning" : "nominal",
     },
     {
+      id: "fence",
+      label: "Fence",
+      value: `${telemetry.fenceKv.toFixed(1)} kV at energizer`,
+      detail: telemetry.fenceKv < 6.4 ? "Inspect fence voltage" : "Voltage within target window",
+      tone: telemetry.fenceKv <= 6 ? "critical" : telemetry.fenceKv <= 6.8 ? "warning" : "nominal",
+    },
+    {
       id: "network",
-      label: "Backhaul link",
+      label: "Network status",
       value: `${telemetry.networkHealth}% uptime`,
       detail:
         telemetry.networkHealth >= 95
@@ -72,13 +79,6 @@ export function Header({ telemetry, herd, user, onLogout, activeScreen = "map", 
             : "Inspect gateway and antennas",
       tone: networkTone,
       icon: <SignalStrengthIcon strength={telemetry.networkHealth} tone={networkTone} />,
-    },
-    {
-      id: "fence",
-      label: "Fence",
-      value: `${telemetry.fenceKv.toFixed(1)} kV at energizer`,
-      detail: telemetry.fenceKv < 6.4 ? "Inspect fence voltage" : "Voltage within target window",
-      tone: telemetry.fenceKv <= 6 ? "critical" : telemetry.fenceKv <= 6.8 ? "warning" : "nominal",
     },
   ];
 
@@ -160,7 +160,7 @@ export function Header({ telemetry, herd, user, onLogout, activeScreen = "map", 
           <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.25em] text-neutral-500">
             <span>Herd {herdCount} head</span>
             <span className="h-1 w-1 rounded-full bg-neutral-700" aria-hidden />
-            <span>Telemetry {telemetry.networkHealth}% link</span>
+            <span>Network status {telemetry.networkHealth}% uptime</span>
             <span className="h-1 w-1 rounded-full bg-neutral-700" aria-hidden />
             <span
               className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-semibold tracking-[0.2em] ${
