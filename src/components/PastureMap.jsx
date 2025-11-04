@@ -14,43 +14,14 @@ const activePastureLayerId = "paddock-active";
 const drawStylesheetId = "mapbox-draw-stylesheet";
 const mapboxTerrainSourceId = "mapbox-dem";
 const skyLayerId = "ranchos-sky";
+const buildingLayerId = "ranchos-3d-buildings";
 
 function createFallbackStyle() {
-  if (!hasMapboxToken) {
-    return "https://demotiles.maplibre.org/style.json";
+  if (hasMapboxToken) {
+    return `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12?access_token=${mapboxToken}`;
   }
 
-  return {
-    version: 8,
-    sources: {
-      satellite: {
-        type: "raster",
-        tiles: [`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}`],
-        tileSize: 256,
-        attribution: "© Mapbox © OpenStreetMap contributors",
-      },
-      dark: {
-        type: "raster",
-        tiles: [`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}`],
-        tileSize: 256,
-        attribution: "© Mapbox © OpenStreetMap contributors",
-      },
-    },
-    layers: [
-      {
-        id: "satellite",
-        type: "raster",
-        source: "satellite",
-        layout: { visibility: "visible" },
-      },
-      {
-        id: "dark",
-        type: "raster",
-        source: "dark",
-        layout: { visibility: "none" },
-      },
-    ],
-  };
+  return "https://demotiles.maplibre.org/style.json";
 }
 
 const drawStyles = [
@@ -197,6 +168,9 @@ export function PastureMap({
   onSelectCow,
   onDrawReady,
   variant = "compact",
+  enableDrawing = true,
+  showCowOverlay = true,
+  showGroupOverlay = true,
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -297,17 +271,19 @@ export function PastureMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const ensureDrawStyles = () => {
-      if (typeof document === "undefined") return;
-      if (document.getElementById(drawStylesheetId)) return;
-      const link = document.createElement("link");
-      link.id = drawStylesheetId;
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.0/dist/mapbox-gl-draw.css";
-      document.head.appendChild(link);
-    };
-
     const loadDraw = () => {
+      if (!enableDrawing) return Promise.resolve(null);
+
+      const ensureDrawStyles = () => {
+        if (typeof document === "undefined") return;
+        if (document.getElementById(drawStylesheetId)) return;
+        const link = document.createElement("link");
+        link.id = drawStylesheetId;
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.0/dist/mapbox-gl-draw.css";
+        document.head.appendChild(link);
+      };
+
       if (typeof window === "undefined") return Promise.resolve(null);
       ensureDrawStyles();
       if (window.MapboxDraw) return Promise.resolve(window.MapboxDraw);
@@ -383,14 +359,14 @@ export function PastureMap({
           });
         }
       }
-      map.setTerrain({ source: mapboxTerrainSourceId, exaggeration: hasMapboxToken ? 1.5 : 1.25 });
+      map.setTerrain({ source: mapboxTerrainSourceId, exaggeration: hasMapboxToken ? 1.6 : 1.25 });
       map.setFog({
         range: [0.6, 8],
         color: "#0b1220",
-        "high-color": hasMapboxToken ? "#1f2937" : "#1f2937",
+        "high-color": "#1f2937",
         "horizon-blend": 0.4,
         "space-color": "#020617",
-        "star-intensity": hasMapboxToken ? 0.12 : 0.08,
+        "star-intensity": hasMapboxToken ? 0.16 : 0.08,
       });
       if (!map.getLayer(skyLayerId)) {
         map.addLayer({
@@ -403,6 +379,28 @@ export function PastureMap({
             "sky-atmosphere-sun-intensity": 12,
           },
         });
+      }
+
+      if (!map.getLayer(buildingLayerId) && map.getSource("composite")) {
+        const beforeLayerId = map
+          .getStyle()
+          ?.layers?.find((layer) => layer.type === "symbol" && layer.layout?.["text-field"])?.id;
+        map.addLayer(
+          {
+            id: buildingLayerId,
+            source: "composite",
+            "source-layer": "building",
+            type: "fill-extrusion",
+            minzoom: 15,
+            paint: {
+              "fill-extrusion-color": ["case", ["has", "underground"], "#1f2937", "#334155"],
+              "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, ["get", "height"], 16, ["get", "height"], 17,
+                ["get", "height"]],
+              "fill-extrusion-opacity": 0.7,
+            },
+          },
+          beforeLayerId,
+        );
       }
     };
 
@@ -449,7 +447,7 @@ export function PastureMap({
           onPasturesChangeRef.current?.(features);
         };
 
-        if (DrawCtor) {
+        if (enableDrawing && DrawCtor) {
           drawInstance = new DrawCtor({
             displayControlsDefault: false,
             controls: {},
@@ -809,12 +807,28 @@ export function PastureMap({
     }
   }, [selectedCow, selectedCowId, cows, groupSelectionIds]);
 
+  useEffect(() => {
+    if (groupSelectionIds.length > 0) return;
+    const map = mapRef.current;
+    if (!map) return;
+    if (!selectedCowId) return;
+    const cow = cows.find((item) => item.id === selectedCowId);
+    if (!cow) return;
+    const currentZoom = map.getZoom?.() ?? 15;
+    map.easeTo({ center: [cow.lon, cow.lat], zoom: Math.max(currentZoom, 15.2), duration: 1200 });
+  }, [selectedCowId, cows, groupSelectionIds.length]);
+
   const handleClearSelection = () => {
     onSelectCowRef.current?.(null);
     setGroupSelectionIds([]);
   };
 
-  const heightClass = variant === "expanded" ? "h-[420px] sm:h-[520px] lg:h-[600px]" : "h-[320px] sm:h-[340px]";
+  const heightClass =
+    variant === "immersive"
+      ? "h-full w-full"
+      : variant === "expanded"
+        ? "h-[420px] sm:h-[520px] lg:h-[600px]"
+        : "h-[320px] sm:h-[340px]";
 
   const handleClearGroup = () => {
     setGroupSelectionIds([]);
@@ -872,9 +886,12 @@ export function PastureMap({
     setActivePastureId(null);
   };
 
+  const frameClass =
+    variant === "immersive" ? "relative" : "relative overflow-hidden rounded-2xl shadow-[0_0_40px_rgba(16,185,129,0.08)]";
+
   return (
-    <div className={`relative ${heightClass} overflow-hidden rounded-2xl`}>
-      {overlayCow && (
+    <div className={`${frameClass} ${heightClass}`}>
+      {showCowOverlay && overlayCow && (
         <div className="pointer-events-none absolute left-3 top-3 z-20 w-64 max-w-[calc(100%-1.5rem)]">
           <div className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur">
             <div className="flex items-start justify-between gap-3">
@@ -976,7 +993,7 @@ export function PastureMap({
           </div>
         </div>
       )}
-      {drawReadyInternal && (
+      {enableDrawing && drawReadyInternal && (
         <div className="pointer-events-none absolute right-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-col gap-2">
           <div className="pointer-events-auto rounded-2xl border border-neutral-800/70 bg-neutral-950/90 p-3 text-[11px] text-neutral-200 backdrop-blur">
             <div className="flex flex-wrap items-center gap-2">
@@ -1010,7 +1027,7 @@ export function PastureMap({
         </div>
       )}
       <div ref={mapContainerRef} className="h-full w-full" />
-      {activePasture && (
+      {enableDrawing && activePasture && (
         <div className="pointer-events-none absolute left-3 bottom-3 z-20 w-72 max-w-[calc(100%-1.5rem)]">
           <form
             onSubmit={handleRenameActivePasture}
@@ -1065,7 +1082,7 @@ export function PastureMap({
           </form>
         </div>
       )}
-      {groupStats && (
+      {showGroupOverlay && groupStats && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10 w-72 max-w-[calc(100%-1.5rem)]">
           <div className="pointer-events-auto rounded-2xl border border-emerald-500/40 bg-neutral-950/95 p-3 text-xs text-neutral-200 shadow-lg backdrop-blur">
             <div className="flex items-start justify-between gap-3">
